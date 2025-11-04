@@ -1,39 +1,12 @@
-import { useEffect } from "react";
-import { connectAnonymous, db } from "./firebase";
-import { ref, set } from "firebase/database";
+import { Outlet } from "react-router-dom";
 
-function App() {
-  useEffect(() => {
-    async function testFirebase() {
-      const user = await connectAnonymous();
-      console.log("Đăng nhập ẩn danh:", user?.uid);
-
-      // Ghi dữ liệu test vào database
-      await set(ref(db, "test/message"), {
-        text: "Xin chào Firebase!",
-        uid: user?.uid,
-      });
-    }
-
-    testFirebase();
-  }, []);
-
+export default function App() {
   return (
-    <div
-      style={{
-        display: "flex",
-        height: "100vh",
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: "#111",
-        color: "#fff",
-        fontSize: "2rem",
-        fontWeight: "bold",
-      }}
-    >
-      TicTacToe React + Firebase
-    </div>
+    <main className="min-h-screen p-4">
+      <div className="max-w-6xl mx-auto">
+        <h1 className="text-xl font-bold mb-4">Shell</h1>
+        <Outlet />
+      </div>
+    </main>
   );
 }
-
-export default App;

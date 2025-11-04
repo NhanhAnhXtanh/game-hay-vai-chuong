@@ -51,6 +51,9 @@ firebase.json
 .cache/
 temp/
 .tmp/
+vite.config.ts.timestamp-*
+tailwind.config.js.timestamp-*
+postcss.config.js.timestamp-*
 
 # =====================
 # IDE / EDITOR
