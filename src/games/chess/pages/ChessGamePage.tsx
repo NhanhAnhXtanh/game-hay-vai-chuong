@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { PieceSymbol, Square } from "chess.js";
 import ChessBoard from "../components/ChessBoard";
@@ -23,23 +24,36 @@ import { CHESS_HOME_PATH } from "../constants";
 const NAME_KEY = "chess-player-name";
 
 const STATUS_STYLES: Record<ChessRoom["status"], { label: string; className: string }> = {
-  LOBBY: { label: "Đang chờ", className: "bg-amber-50 text-amber-700 border border-amber-200" },
-  PLAYING: { label: "Đang chơi", className: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
-  CHECKMATE: { label: "Chiếu bí", className: "bg-indigo-50 text-indigo-700 border border-indigo-200" },
-  DRAW: { label: "Hòa", className: "bg-slate-50 text-slate-700 border border-slate-200" },
-  STALEMATE: { label: "Hòa (stalemate)", className: "bg-slate-50 text-slate-700 border border-slate-200" },
-  RESIGN: { label: "Xin thua", className: "bg-rose-50 text-rose-700 border border-rose-200" }
+  LOBBY: { label: "Waiting", className: "bg-amber-50 text-amber-700 border border-amber-200" },
+  PLAYING: { label: "Playing", className: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
+  CHECKMATE: { label: "Checkmate", className: "bg-indigo-50 text-indigo-700 border border-indigo-200" },
+  DRAW: { label: "Draw", className: "bg-slate-50 text-slate-700 border border-slate-200" },
+  STALEMATE: { label: "Draw (stalemate)", className: "bg-slate-50 text-slate-700 border border-slate-200" },
+  RESIGN: { label: "Resigned", className: "bg-rose-50 text-rose-700 border border-rose-200" }
 };
 
 export default function ChessGamePage() {
   const { roomId } = useParams();
   const navigate = useNavigate();
+  const initialName = typeof window !== "undefined" ? (localStorage.getItem(NAME_KEY)?.trim() ?? "") : "";
+  const [playerName, setPlayerName] = useState(initialName);
+  const [needsName, setNeedsName] = useState(() => !initialName);
+  const [copied, setCopied] = useState(false);
   const [room, setRoom] = useState<ChessRoom | null>(null);
   const [side, setSide] = useState<ChessSide | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const joinedRef = useRef(false);
+  const copyTimeoutRef = useRef<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        window.clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 500);
@@ -53,33 +67,43 @@ export default function ChessGamePage() {
       setRoom(snapshot);
       setLoading(false);
     });
+    return () => {
+      unsubscribe();
+    };
+  }, [roomId]);
+
+  useEffect(() => {
+    if (!roomId || needsName) return;
+    const normalizedName = playerName.trim() || localStorage.getItem(NAME_KEY)?.trim() || "Chess guest";
 
     const join = async () => {
       try {
-        const storedName = localStorage.getItem(NAME_KEY) || "Chess guest";
-        const user = await ensureChessAnon(storedName);
-        const seat = await joinChessRoom(roomId, user.uid, storedName);
+        localStorage.setItem(NAME_KEY, normalizedName);
+        setPlayerName(normalizedName);
+        const user = await ensureChessAnon(normalizedName);
+        const seat = await joinChessRoom(roomId, user.uid, normalizedName);
         setSide(seat);
         joinedRef.current = true;
         setError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Không thể vào phòng, bạn đang xem với tư cách khán giả.");
+        setError(err instanceof Error ? err.message : "Unable to join, you are viewing as a spectator.");
       }
     };
     join();
 
     return () => {
-      unsubscribe();
       if (joinedRef.current && chessAuth.currentUser) {
         leaveChessRoom(roomId, chessAuth.currentUser.uid).catch(() => {});
+        joinedRef.current = false;
       }
     };
-  }, [roomId]);
+  }, [roomId, needsName, playerName]);
 
   const lastMove = room?.moves?.[room.moves.length - 1];
   const myUid = chessAuth.currentUser?.uid;
   const isPlaying = room?.status === "PLAYING";
   const isMyTurn = Boolean(room && side && isPlaying && room.turn === side);
+  const scores = room?.scores ?? {};
 
   async function handleMove(from: Square, to: Square, promotion?: PieceSymbol | null) {
     if (!roomId || !myUid) return;
@@ -87,21 +111,23 @@ export default function ChessGamePage() {
       await makeChessMove(roomId, { from, to, promotion, uid: myUid });
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Không thể thực hiện nước đi.");
+      setError(err instanceof Error ? err.message : "Unable to play that move.");
     }
   }
 
   async function handleClaimSeat() {
     if (!roomId) return;
     try {
-      const storedName = localStorage.getItem(NAME_KEY) || "Chess guest";
-      const user = await ensureChessAnon(storedName);
-      const seat = await joinChessRoom(roomId, user.uid, storedName);
+      const normalizedName = playerName.trim() || localStorage.getItem(NAME_KEY) || "Chess guest";
+      localStorage.setItem(NAME_KEY, normalizedName);
+      setPlayerName(normalizedName);
+      const user = await ensureChessAnon(normalizedName);
+      const seat = await joinChessRoom(roomId, user.uid, normalizedName);
       setSide(seat);
       joinedRef.current = true;
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Không thể vào làm người chơi.");
+      setError(err instanceof Error ? err.message : "Unable to sit down right now.");
     }
   }
 
@@ -120,6 +146,25 @@ export default function ChessGamePage() {
     await acknowledgeFinish(roomId, side);
   }
 
+  function handleCopyLink() {
+    try {
+      navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      if (copyTimeoutRef.current) {
+        window.clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* ignore clipboard errors */
+    }
+  }
+
+  function handleNameSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (!playerName.trim()) return;
+    setNeedsName(false);
+  }
+
   async function handleLeave() {
     if (!roomId || !myUid) {
       navigate(CHESS_HOME_PATH);
@@ -135,27 +180,27 @@ export default function ChessGamePage() {
     let text = "";
     switch (room.status) {
       case "LOBBY":
-        text = "Chờ đủ 2 người chơi.";
+        text = "Waiting for two players.";
         break;
       case "PLAYING":
-        text = room.turn === "white" ? "Lượt quân Trắng" : "Lượt quân Đen";
+        text = room.turn === "white" ? "White to move" : "Black to move";
         break;
       case "CHECKMATE":
-        text = room.winner ? `${room.winner === "white" ? "Trắng" : "Đen"} thắng (chiếu bí)` : "Đã chiếu bí";
+        text = room.winner ? `${room.winner === "white" ? "White" : "Black"} wins by checkmate.` : "Checkmate.";
         break;
       case "RESIGN":
-        text = room.winner ? `${room.winner === "white" ? "Trắng" : "Đen"} thắng (đối thủ xin thua)` : "Ván đấu kết thúc";
+        text = room.winner ? `${room.winner === "white" ? "White" : "Black"} wins (opponent resigned).` : "Game finished.";
         break;
       case "DRAW":
-        text = "Ván cờ hòa.";
+        text = "Game drawn.";
         break;
       case "STALEMATE":
-        text = "Hòa do hết nước đi hợp lệ.";
+        text = "Draw due to stalemate.";
         break;
       default:
         text = "";
     }
-    if (!side) text = text ? `${text} • Bạn đang xem` : "Bạn đang xem ván đấu này.";
+    if (!side) text = text ? `${text} · You are spectating.` : "You are watching this game.";
     return text;
   }, [room, side]);
 
@@ -171,6 +216,8 @@ export default function ChessGamePage() {
   const boardMatrix = useMemo(() => boardFromMoves(historyMoves), [historyMoves]);
 
   const players = room?.players ?? { white: null, black: null };
+  const whiteScore = players.white?.uid ? scores[players.white.uid] ?? 0 : 0;
+  const blackScore = players.black?.uid ? scores[players.black.uid] ?? 0 : 0;
   const hasFinished = !!(room && room.status !== "PLAYING" && room.status !== "LOBBY");
   const finishedAtMs = hasFinished && room && typeof room.finishedAt === "number" ? room.finishedAt : null;
   const delayActive = Boolean(hasFinished && finishedAtMs && now - finishedAtMs < 5000);
@@ -180,29 +227,71 @@ export default function ChessGamePage() {
   const canReset = Boolean(hasFinished && bothAck);
   const finishMessage = hasFinished
     ? room.winner
-      ? `${room.winner === "white" ? "Trắng" : "Đen"} thắng (${room.status.toLowerCase()})`
+      ? `${room.winner === "white" ? "White" : "Black"} wins (${room.status.toLowerCase()}).`
       : room.status === "DRAW"
-        ? "Ván cờ hòa."
-        : "Trận đấu đã kết thúc."
+        ? "The game ended in a draw."
+        : "This game has finished."
     : "";
   const seatAvailable = !side && (!players.white || !players.black);
   const statusBadge = room ? STATUS_STYLES[room.status] : null;
 
+  useEffect(() => {
+    if (!room || !chessAuth.currentUser) return;
+    const uid = chessAuth.currentUser.uid;
+    const nextSide =
+      room.players?.white?.uid === uid ? "white" :
+      room.players?.black?.uid === uid ? "black" :
+      null;
+    if (nextSide !== side) {
+      setSide(nextSide);
+    }
+  }, [room?.players?.white?.uid, room?.players?.black?.uid, side]);
+
   if (loading) {
-    return <p className="text-center text-gray-600">Đang tải phòng cờ vua...</p>;
+    return <p className="text-center text-gray-600">Loading chess room...</p>;
   }
 
   if (!room) {
     return (
       <div className="text-center space-y-3">
-        <p className="text-2xl font-semibold text-gray-900">Không tìm thấy phòng.</p>
+        <p className="text-2xl font-semibold text-gray-900">Room not found.</p>
         <button
           className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white"
           onClick={() => navigate(CHESS_HOME_PATH)}
         >
-          Quay về sảnh
+          Back to lobby
         </button>
       </div>
+    );
+  }
+
+  if (needsName) {
+    return (
+      <section className="max-w-2xl mx-auto space-y-6 text-gray-900">
+        <div className="rounded-3xl bg-gradient-to-br from-indigo-50 via-white to-purple-50 p-6 shadow-sm border border-indigo-100">
+          <p className="text-xs uppercase tracking-[0.3em] text-indigo-600 font-semibold mb-2">Room {room.id}</p>
+          <h1 className="text-3xl font-bold mb-2">Enter a name to join</h1>
+          <p className="text-sm text-gray-600">Let everyone know who you are before you jump into the room.</p>
+        </div>
+        <form onSubmit={handleNameSubmit} className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6 space-y-4">
+          <label className="space-y-1 block">
+            <span className="text-sm font-medium text-gray-700">Display name</span>
+            <input
+              className="w-full rounded-xl border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+              value={playerName}
+              onChange={e => setPlayerName(e.target.value)}
+              placeholder="Example: Guest"
+            />
+          </label>
+          <button
+            type="submit"
+            className="inline-flex items-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            disabled={!playerName.trim()}
+          >
+            Join room
+          </button>
+        </form>
+      </section>
     );
   }
 
@@ -212,7 +301,7 @@ export default function ChessGamePage() {
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <div className="flex items-center gap-3 flex-wrap">
-              <p className="text-xs uppercase tracking-[0.3em] text-indigo-600 font-semibold">Phòng {room.id}</p>
+              <p className="text-xs uppercase tracking-[0.3em] text-indigo-600 font-semibold">Room {room.id}</p>
               {statusBadge && (
                 <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusBadge.className}`}>
                   {statusBadge.label}
@@ -224,22 +313,16 @@ export default function ChessGamePage() {
           </div>
           <div className="flex flex-wrap gap-3">
             <button
-              onClick={() => {
-                try {
-                  navigator.clipboard.writeText(window.location.href);
-                } catch {
-                  /* ignore */
-                }
-              }}
+              onClick={handleCopyLink}
               className="rounded-xl border border-gray-200 bg-white/90 px-4 py-2 text-sm font-semibold text-gray-700 hover:border-indigo-200 transition"
             >
-              Sao chép link
+              {copied ? "Link copied" : "Copy link"}
             </button>
             <button
               onClick={handleLeave}
               className="rounded-xl bg-gray-900 text-white px-4 py-2 text-sm font-semibold shadow-lg shadow-gray-200/60"
             >
-              Rời phòng
+              Leave room
             </button>
           </div>
         </div>
@@ -247,7 +330,7 @@ export default function ChessGamePage() {
           <div className="rounded-2xl border border-indigo-100 bg-white/80 px-4 py-3 space-y-2">
             <p className="text-lg font-semibold text-indigo-900">{finishMessage}</p>
             {delayActive ? (
-              <p className="text-sm text-indigo-700">Chờ {countdown}s trước khi xác nhận ván mới…</p>
+              <p className="text-sm text-indigo-700">Wait {countdown}s before confirming the rematch…</p>
             ) : (
               side && (
                 <button
@@ -255,12 +338,12 @@ export default function ChessGamePage() {
                   onClick={handleAcknowledge}
                   className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 disabled:opacity-60"
                 >
-                  {myAck ? "Bạn đã sẵn sàng" : "Tôi đã sẵn sàng ván mới"}
+                  {myAck ? "Ready" : "I'm ready for the next game"}
                 </button>
               )
             )}
             <p className="text-xs text-gray-600">
-              {bothAck ? "Cả hai người chơi đã xác nhận – có thể bấm Bắt đầu ván mới." : "Đang chờ cả hai người chơi xác nhận."}
+              {bothAck ? "Both players confirmed. Hit Start new game when ready." : "Waiting for both players to confirm."}
             </p>
           </div>
         )}
@@ -269,31 +352,33 @@ export default function ChessGamePage() {
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px] items-start">
-          <div className="rounded-3xl border border-white/70 bg-white/95 shadow-xl shadow-indigo-50 p-4 sm:p-6">
-            <ChessBoard
-              fen={room.fen}
-              board={boardMatrix}
-              perspective={side ?? "white"}
-              canMove={Boolean(isMyTurn && room.status === "PLAYING")}
-              lastMove={lastMove ? { from: lastMove.from, to: lastMove.to } : null}
-              helperText={helperText}
-              onMove={handleMove}
-            />
-          </div>
+        <div className="rounded-3xl border border-white/70 bg-white/95 shadow-xl shadow-indigo-50 p-4 sm:p-6">
+          <ChessBoard
+            fen={room.fen}
+            board={boardMatrix}
+            perspective={side ?? "white"}
+            canMove={Boolean(isMyTurn && room.status === "PLAYING")}
+            lastMove={lastMove ? { from: lastMove.from, to: lastMove.to } : null}
+            helperText={helperText}
+            onMove={handleMove}
+          />
+        </div>
 
         <div className="space-y-4">
           <div className="rounded-2xl border border-slate-200 bg-white/90 shadow-sm space-y-4 p-4">
             <PlayerInfoCard
-              label="Người chơi 1"
+              label="Player 1"
               player={players.white}
               side="white"
+              score={whiteScore}
               isTurn={room.turn === "white" && room.status === "PLAYING"}
               isMe={players.white?.uid === myUid}
             />
             <PlayerInfoCard
-              label="Người chơi 2"
+              label="Player 2"
               player={players.black}
               side="black"
+              score={blackScore}
               isTurn={room.turn === "black" && room.status === "PLAYING"}
               isMe={players.black?.uid === myUid}
             />
@@ -305,7 +390,7 @@ export default function ChessGamePage() {
                 onClick={handleClaimSeat}
                 className="w-full rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-700 hover:border-indigo-300"
               >
-                Xin vào làm người chơi
+                Take a seat
               </button>
             )}
             {side && room.status === "PLAYING" && (
@@ -313,7 +398,7 @@ export default function ChessGamePage() {
                 onClick={handleResign}
                 className="w-full rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-600"
               >
-                Xin thua
+                Resign
               </button>
             )}
             {side && hasFinished && (
@@ -322,16 +407,16 @@ export default function ChessGamePage() {
                 disabled={!canReset}
                 className="w-full rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 disabled:opacity-40"
               >
-                {canReset ? "Bắt đầu ván mới" : "Chờ cả hai xác nhận"}
+                {canReset ? "Start new game" : "Waiting for both players"}
               </button>
             )}
             {!side && !seatAvailable && (
-              <p className="text-xs text-gray-500 text-center">Bạn đang xem với tư cách khán giả.</p>
+              <p className="text-xs text-gray-500 text-center">Both seats are taken. You are spectating.</p>
             )}
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm max-h-[420px] overflow-auto">
-            <p className="text-sm font-semibold text-gray-700 mb-3">Lịch sử nước đi</p>
+            <p className="text-sm font-semibold text-gray-700 mb-3">Move history</p>
             <MoveHistory moves={room.moves ?? []} />
           </div>
         </div>

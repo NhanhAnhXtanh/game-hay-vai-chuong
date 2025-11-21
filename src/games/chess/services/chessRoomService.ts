@@ -55,6 +55,7 @@ export interface ChessRoom {
     white: ChessPlayer | null;
     black: ChessPlayer | null;
   };
+  scores?: Record<string, number>;
   moves: ChessMove[];
   createdAt: number | object;
   updatedAt: number | object;
@@ -62,6 +63,23 @@ export interface ChessRoom {
 
 function roomRef(roomId: string) {
   return ref(chessDb, `${COLLECTION}/${roomId}`);
+}
+
+function ensureScores(room: ChessRoom) {
+  if (!room.scores) {
+    room.scores = {};
+  }
+  return room.scores;
+}
+
+function incrementScore(room: ChessRoom, side: ChessSide | null) {
+  if (!side) return;
+  if (!room.players) room.players = { white: null, black: null };
+  const player = room.players[side];
+  if (!player?.uid) return;
+  const scores = ensureScores(room);
+  const current = typeof scores[player.uid] === "number" ? scores[player.uid]! : 0;
+  scores[player.uid] = current + 1;
 }
 
 export async function createChessRoom(name: string) {
@@ -77,6 +95,7 @@ export async function createChessRoom(name: string) {
     finishedAt: null,
     finishAck: { white: false, black: false },
     players: { white: null, black: null },
+    scores: {},
     moves: [],
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
@@ -104,6 +123,7 @@ export async function joinChessRoom(roomId: string, uid: string, name: string) {
     if (!room.finishAck) room.finishAck = { white: false, black: false };
     if (typeof room.finishedAt === "undefined") room.finishedAt = null;
     if (!room.players) room.players = { white: null, black: null };
+    if (!room.scores) room.scores = {};
 
     const rejoin =
       room.players.white?.uid === uid ? "white" :
@@ -125,6 +145,9 @@ export async function joinChessRoom(roomId: string, uid: string, name: string) {
 
     room.players[slot] = { uid, name: normalized };
     assigned = slot;
+    if (typeof room.scores[uid] !== "number") {
+      room.scores[uid] = 0;
+    }
 
     if (room.status === "LOBBY" && room.players.white && room.players.black) {
       room.status = "PLAYING";
@@ -152,12 +175,14 @@ export async function leaveChessRoom(roomId: string, uid: string) {
     if (!room.finishAck) room.finishAck = { white: false, black: false };
     if (typeof room.finishedAt === "undefined") room.finishedAt = null;
     if (!room.players) room.players = { white: null, black: null };
+    if (!room.scores) room.scores = {};
     const side =
       room.players.white?.uid === uid ? "white" :
       room.players.black?.uid === uid ? "black" :
       null;
     if (!side) return room;
     room.players[side] = null;
+    room.scores = {};
     room.status = "LOBBY";
     room.fen = INITIAL_FEN;
     room.turn = "white";
@@ -183,6 +208,7 @@ export async function makeChessMove(roomId: string, payload: MovePayload) {
     if (!room) return room;
     if (!room.finishAck) room.finishAck = { white: false, black: false };
     if (typeof room.finishedAt === "undefined") room.finishedAt = null;
+    if (!room.scores) room.scores = {};
     if (room.status === "CHECKMATE") return room;
     const side =
       room.players.white?.uid === payload.uid ? "white" :
@@ -225,6 +251,7 @@ export async function makeChessMove(roomId: string, payload: MovePayload) {
       room.result = { type: "CHECKMATE", by: side };
       room.finishedAt = serverTimestamp();
       room.finishAck = { white: false, black: false };
+      incrementScore(room, side);
     } else {
       room.status = "PLAYING";
       room.result = null;
@@ -257,6 +284,7 @@ export async function resignChess(roomId: string, uid: string) {
     if (!room.finishAck) room.finishAck = { white: false, black: false };
     if (typeof room.finishedAt === "undefined") room.finishedAt = null;
     if (!room.players) room.players = { white: null, black: null };
+    if (!room.scores) room.scores = {};
     const side =
       room.players.white?.uid === uid ? "white" :
       room.players.black?.uid === uid ? "black" :
@@ -269,6 +297,7 @@ export async function resignChess(roomId: string, uid: string) {
     room.finishedAt = serverTimestamp();
     room.finishAck = { white: false, black: false };
     room.updatedAt = serverTimestamp();
+    incrementScore(room, winner);
     return room;
   });
 }
@@ -277,6 +306,12 @@ export async function resetChessRoom(roomId: string) {
   await runTransaction(roomRef(roomId), (room: ChessRoom | null) => {
     if (!room) return room;
     if (!room.finishAck) room.finishAck = { white: false, black: false };
+    if (!room.players) room.players = { white: null, black: null };
+    if (room.players.white && room.players.black) {
+      const currentWhite = room.players.white;
+      room.players.white = room.players.black;
+      room.players.black = currentWhite;
+    }
     room.status = room.players?.white && room.players?.black ? "PLAYING" : "LOBBY";
     room.fen = INITIAL_FEN;
     room.turn = "white";
