@@ -1,12 +1,15 @@
 ﻿import { Link } from "react-router-dom";
 import { ticTacToeGame } from "../games/tictactoe";
 import { chessGame } from "../games/chess";
+import { flappyGame } from "../games/flappy";
 import { TIC_TAC_TOE_HOME_PATH } from "../games/tictactoe/constants";
 import { CHESS_HOME_PATH } from "../games/chess/constants";
+import { FLAPPY_HOME_PATH } from "../games/flappy/constants";
 
 const cards = [
   { game: ticTacToeGame, href: TIC_TAC_TOE_HOME_PATH },
-  { game: chessGame, href: CHESS_HOME_PATH }
+  { game: chessGame, href: CHESS_HOME_PATH },
+  { game: flappyGame, href: FLAPPY_HOME_PATH }
 ];
 
 export default function HomePage() {

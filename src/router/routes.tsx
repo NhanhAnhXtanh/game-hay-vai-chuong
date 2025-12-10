@@ -3,8 +3,9 @@ import App from "../App";
 import HomePage from "../pages/HomePage";
 import { ticTacToeGame } from "../games/tictactoe";
 import { chessGame } from "../games/chess";
+import { flappyGame } from "../games/flappy";
 
-const gameRoutes: RouteObject[] = [...ticTacToeGame.routes, ...chessGame.routes];
+const gameRoutes: RouteObject[] = [...ticTacToeGame.routes, ...chessGame.routes, ...flappyGame.routes];
 
 const routes: RouteObject[] = [
   {
