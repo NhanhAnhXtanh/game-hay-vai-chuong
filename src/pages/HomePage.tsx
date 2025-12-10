@@ -16,8 +16,8 @@ export default function HomePage() {
         <p className="text-sm uppercase tracking-widest text-indigo-600 font-semibold">Playground</p>
         <h1 className="text-4xl font-bold text-gray-900">Chon tro choi</h1>
         <p className="text-gray-600 max-w-2xl mx-auto">
-          He thong moi cho phep ban chon nhieu tro choi thoi gian thuc. Bat dau voi Gomoku va theo doi nhung
-          tuyen thu moi dang duoc phat trien.
+          He thong da gom Gomoku 20x20 va Co vua realtime (Firebase rieng). Chon tro va moi ban cua ban vao phong
+          bang ma chia se.
         </p>
       </header>
       <div className="grid gap-6 md:grid-cols-2">

@@ -16,6 +16,7 @@
 * **Tỉ số**: cộng điểm người thắng; **Chơi tiếp** giữ tỉ số, chỉ reset bàn cờ.
 * **Realtime** mọi thao tác: vào/ra phòng, sẵn sàng, đặt quân, kết thúc ván…
 * Đặt quân dùng **transaction** tránh xung đột khi bấm đồng thời.
+* **Chess realtime**: phòng cờ vua tách biệt, đồng bộ bằng Firebase project B (`VITE_CHESS_*`), có board tương tác, move list, xin thua & reset ván.
 
 ---
 
@@ -30,28 +31,26 @@
 ## 📂 Cấu trúc thư mục
 
 ```
- tictactoe-react-firebase/
- ├─ src/
- │  ├─ components/
- │  │  └─ game/
- │  │     └─ GameBoard.tsx
- │  ├─ pages/
- │  │  ├─ LobbyPage.tsx
- │  │  └─ GamePage.tsx
- │  ├─ services/
- │  │  ├─ roomService.ts      // tạo/vào/phát sự kiện phòng, transactions, ready, play-again
- │  │  └─ gameLogic.ts        // SIZE=20, WIN=5, checkWin(), emptyBoard()
- │  ├─ firebase.ts            // init app + Realtime Database + Auth
- │  ├─ App.tsx
- │  ├─ main.tsx
- │  └─ index.css
- ├─ public/
- ├─ firebase.json             // hosting rewrites SPA
- ├─ database.rules.json       // rules Realtime DB
- ├─ postcss.config.js
- ├─ tailwind.config.js        // (nếu dùng v3)
- ├─ .env                      // VITE_* Firebase keys (không commit)
- └─ package.json
+tictactoe-react-firebase/
+├─ src/
+│  ├─ games/
+│  │  ├─ tictactoe/          # Gomoku: lobby/game pages, logic, services
+│  │  └─ chess/              # Chess: lobby/game pages, chess.js helpers, Firebase B services
+│  ├─ pages/
+│  │  └─ HomePage.tsx
+│  ├─ router/
+│  │  └─ routes.tsx
+│  ├─ games/shared/firebase.ts  # init Firebase app A + ChessApp (project B)
+│  ├─ App.tsx
+│  ├─ main.tsx
+│  └─ index.css
+├─ public/
+├─ firebase.json             # hosting rewrites SPA
+├─ database.rules.json       # rules Realtime DB (project A mẫu)
+├─ postcss.config.js
+├─ tailwind.config.js
+├─ .env                      # VITE_* Firebase keys (A + B)
+└─ package.json
 ```
 
 ---
@@ -110,6 +109,29 @@ VITE_FIREBASE_MESSAGING_SENDER_ID=...
 VITE_FIREBASE_APP_ID=...
 ```
 
+### 3b) Cau hinh Firebase Chess (Project B)
+
+> Project Chess (database B) dung rieng cho game co vua, tach hoan toan khoi project host (TicTacToe).
+
+```env
+VITE_CHESS_FIREBASE_API_KEY=...
+VITE_CHESS_FIREBASE_AUTH_DOMAIN=...
+VITE_CHESS_FIREBASE_DATABASE_URL=...
+VITE_CHESS_FIREBASE_PROJECT_ID=...
+VITE_CHESS_FIREBASE_STORAGE_BUCKET=...
+VITE_CHESS_FIREBASE_MESSAGING_SENDER_ID=...
+VITE_CHESS_FIREBASE_APP_ID=...
+```
+
+File `src/games/shared/firebase.ts` khoi tao 2 Firebase app: app mac dinh cho TicTacToe va `ChessApp` doc lap thong qua cac bien `VITE_CHESS_*`. Chess Board/service se doc/ghi tren project B nen khong anh huong den DB cua cac game khac.
+
+### 3c) Host chung 1 website (project A)
+
+1. Build frontend (`npm run build`).
+2. `firebase use <project-host-A>` va `firebase deploy --only hosting`.
+3. Dien ca 2 bo config (A & B) vao `.env` truoc khi build. Bundle chua ca 2 Firebase app nhung Hosting chi deploy len project A nen chi co 1 domain.
+
+> Neu muon them project Firebase moi cho game khac: tao bo env `VITE_<GAME>_FIREBASE_*` va goi `initializeApp(config, "<Game>App")` trong `games/shared/firebase.ts`.
 ### 4) Thiết lập Firebase
 
 * **Authentication** → bật **Anonymous**.
@@ -153,6 +175,35 @@ Node chính: `/rooms/{roomId}`
 * Ghi/đổi trạng thái bằng `set() / update()`.
 * **Đặt quân** dùng `runTransaction()` để kiểm tra lượt/ô trống và cập nhật **atomic**.
 * Dùng `serverTimestamp()` để đồng bộ thời gian server.
+
+### Chess (project B)
+
+Node chính: `/matches/{roomId}` (Realtime Database trong project Chess).
+
+```jsonc
+{
+  "id": "Q4K8Z",
+  "name": "Phong co vua",
+  "status": "LOBBY" | "PLAYING" | "CHECKMATE" | "DRAW" | "STALEMATE" | "RESIGN",
+  "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+  "turn": "white" | "black",
+  "players": {
+    "white": { "uid": "...", "name": "Alice" },
+    "black": { "uid": "...", "name": "Bob" }
+  },
+  "moves": [
+    { "moveNumber": 1, "san": "e4", "from": "e2", "to": "e4", "by": "white" }
+  ],
+  "winner": "white" | "black" | null,
+  "result": { "type": "CHECKMATE", "by": "white" },
+  "createdAt": { ".sv": "timestamp" },
+  "updatedAt": { ".sv": "timestamp" }
+}
+```
+
+* Chess logic sử dụng `chess.js` để validate nước đi, phát hiện checkmate/stalemate/draw.
+* Mọi thao tác (tạo phòng, tham gia, di chuyển, xin thua, reset) dùng `runTransaction()` trên `/matches/{roomId}`.
+* Người chơi được gán màu theo thứ tự vào phòng; nếu phòng đủ 2 người, trạng thái chuyển sang `PLAYING` tự động.
 
 ---
 
