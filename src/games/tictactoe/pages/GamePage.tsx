@@ -20,9 +20,9 @@ export default function GamePage() {
   });
   const [nameDraft, setNameDraft] = useState(() => displayName ?? "");
   const [nameError, setNameError] = useState<string | null>(null);
-  const [room, setRoom] = useState<Room|null>(null);
-  const [myUid, setMyUid] = useState<string|null>(null);
-  const [joinError, setJoinError] = useState<string|null>(null);
+  const [room, setRoom] = useState<Room | null>(null);
+  const [myUid, setMyUid] = useState<string | null>(null);
+  const [joinError, setJoinError] = useState<string | null>(null);
   const [showWinModal, setShowWinModal] = useState(false);
   const [winActionsEnabled, setWinActionsEnabled] = useState(false);
   const [winCountdown, setWinCountdown] = useState(0);
@@ -30,8 +30,10 @@ export default function GamePage() {
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [chatDraft, setChatDraft] = useState("");
   const chatListRef = useRef<HTMLDivElement | null>(null);
+  const [showSurrenderConfirm, setShowSurrenderConfirm] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
 
-  const mySide = useMemo<"X"|"O"|null>(() => {
+  const mySide = useMemo<"X" | "O" | null>(() => {
     if (!room || !myUid) return null;
     if (room.players?.X?.uid === myUid) return "X";
     if (room.players?.O?.uid === myUid) return "O";
@@ -40,7 +42,7 @@ export default function GamePage() {
 
   useEffect(() => {
     if (!displayName) return;
-    let off: (()=>void)|null = null;
+    let off: (() => void) | null = null;
     (async () => {
       const me = await ensureAnon(displayName);
       setMyUid(me.uid);
@@ -63,7 +65,7 @@ export default function GamePage() {
     return () => { if (off) off(); };
   }, [roomId, pw, displayName]);
 
-  async function onMove(r:number, c:number) {
+  async function onMove(r: number, c: number) {
     if (!room || !mySide) return;
     if (room.status !== "PLAYING") return;
     await placeMove(roomId!, mySide, r, c);
@@ -92,10 +94,14 @@ export default function GamePage() {
 
   async function onSurrenderClick() {
     if (!mySide || !room) return;
-    await surrender(roomId!, mySide);
+    setShowSurrenderConfirm(true);
   }
 
   async function onLeave() {
+    if (room?.status === "PLAYING" && mySide) {
+      setShowLeaveConfirm(true);
+      return;
+    }
     if (mySide) await leaveRoom(roomId!, mySide);
     nav(TIC_TAC_TOE_HOME_PATH);
   }
@@ -118,7 +124,7 @@ export default function GamePage() {
       showTimer = setTimeout(() => {
         setShowWinModal(true);
         setWinActionsEnabled(false);
-        setWinCountdown(5);
+        setWinCountdown(3);
         countdownInterval = setInterval(() => {
           setWinCountdown(prev => (prev > 0 ? prev - 1 : 0));
         }, 1000);
@@ -129,7 +135,7 @@ export default function GamePage() {
             clearInterval(countdownInterval);
             countdownInterval = null;
           }
-        }, 5000);
+        }, 3000);
       }, 1000);
     } else {
       setShowWinModal(false);
@@ -142,6 +148,13 @@ export default function GamePage() {
       if (enableTimer) clearTimeout(enableTimer);
       if (countdownInterval) clearInterval(countdownInterval);
     };
+  }, [room?.status]);
+
+  useEffect(() => {
+    if (room?.status !== "PLAYING") {
+      setShowSurrenderConfirm(false);
+      setShowLeaveConfirm(false);
+    }
   }, [room?.status]);
 
   async function onCopyRoomId() {
@@ -264,7 +277,7 @@ export default function GamePage() {
   const surrenderedName =
     resultType === "SURRENDER"
       ? (resultBy === "X" ? (playerX?.name || "Người chơi X") :
-         resultBy === "O" ? (playerO?.name || "Người chơi O") : "Người chơi")
+        resultBy === "O" ? (playerO?.name || "Người chơi O") : "Người chơi")
       : null;
   const resultMessage = (() => {
     if (resultType === "DRAW") return "Ván đấu kết thúc với kết quả hoà.";
@@ -404,7 +417,7 @@ export default function GamePage() {
             </div>
 
             <div className="rounded-xl border p-4 bg-white space-y-3">
-              {room.status==="LOBBY" && (
+              {room.status === "LOBBY" && (
                 <>
                   <div>Trạng thái: Phòng chờ</div>
                   {joinError && (
@@ -423,65 +436,125 @@ export default function GamePage() {
                 </>
               )}
 
-              {room.status==="PLAYING" && (
+              {room.status === "PLAYING" && (
                 <div className="space-y-3">
-                  <div>Đang chơi. Lượt: {room.turn==="X" ? playerX?.name : playerO?.name}</div>
+                  <div>Đang chơi. Lượt: {room.turn === "X" ? playerX?.name : playerO?.name}</div>
                   <div className="text-sm text-slate-600">
                     {mySide ? (room.turn === mySide ? "Đến lượt bạn." : "Chờ đối phương.") : "Bạn đang xem."}
                   </div>
                   {mySide ? (
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      <button
-                        className="px-3 py-2 rounded border bg-white hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                        onClick={onOfferDrawClick}
-                        disabled={drawPending}
-                      >
-                        Xin hoà
-                      </button>
-                      <button
-                        className="px-3 py-2 rounded border border-red-400 text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                        onClick={onSurrenderClick}
-                      >
-                        Đầu hàng
-                      </button>
+                    <div className="space-y-3 pt-1">
+                      {!showSurrenderConfirm && !showLeaveConfirm && (
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            className="px-3 py-2 rounded border bg-white hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                            onClick={onOfferDrawClick}
+                            disabled={drawPending}
+                          >
+                            Xin hoà
+                          </button>
+                          <button
+                            className="px-3 py-2 rounded border border-red-400 text-red-600 hover:bg-red-50"
+                            onClick={onSurrenderClick}
+                          >
+                            Đầu hàng
+                          </button>
+                          <button
+                            className="px-4 py-2 rounded border hover:bg-slate-100"
+                            onClick={onLeave}
+                          >
+                            Rời phòng
+                          </button>
+                        </div>
+                      )}
+
+                      {showSurrenderConfirm && (
+                        <div className="p-3 rounded-lg border border-red-200 bg-red-50 space-y-2">
+                          <div className="text-sm text-red-800 font-medium">Bạn có chắc chắn muốn đầu hàng?</div>
+                          <div className="flex gap-2">
+                            <button
+                              className="px-3 py-1.5 rounded bg-red-600 text-white text-sm font-medium hover:bg-red-700"
+                              onClick={async () => {
+                                await surrender(roomId!, mySide!);
+                                setShowSurrenderConfirm(false);
+                              }}
+                            >
+                              Đồng ý
+                            </button>
+                            <button
+                              className="px-3 py-1.5 rounded border border-slate-300 bg-white text-sm font-medium hover:bg-slate-50"
+                              onClick={() => setShowSurrenderConfirm(false)}
+                            >
+                              Từ chối
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {showLeaveConfirm && (
+                        <div className="p-3 rounded-lg border border-orange-200 bg-orange-50 space-y-2">
+                          <div className="text-sm text-orange-800 font-medium">
+                            Rời phòng sẽ huỷ trận đấu. Bạn chắc chứ?
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              className="px-3 py-1.5 rounded bg-orange-600 text-white text-sm font-medium hover:bg-orange-700"
+                              onClick={async () => {
+                                if (mySide) await leaveRoom(roomId!, mySide);
+                                nav(TIC_TAC_TOE_HOME_PATH);
+                              }}
+                            >
+                              Đồng ý
+                            </button>
+                            <button
+                              className="px-3 py-1.5 rounded border border-slate-300 bg-white text-sm font-medium hover:bg-slate-50"
+                              onClick={() => setShowLeaveConfirm(false)}
+                            >
+                              Từ chối
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {drawOfferedByMe && (
+                        <div className="text-sm text-blue-600">Bạn đã đề nghị hoà. Đang chờ đối thủ phản hồi…</div>
+                      )}
+                      {drawPendingForMe && (
+                        <div className="space-y-2 p-3 rounded-lg border border-emerald-200 bg-emerald-50">
+                          <div className="text-sm text-emerald-800 font-medium">
+                            {drawOfferFrom === "X" ? (playerX?.name || "Người chơi X") : (playerO?.name || "Người chơi O")} muốn hoà.
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              className="px-3 py-1.5 rounded bg-emerald-500 text-white text-sm font-medium hover:bg-emerald-600"
+                              onClick={() => onRespondDrawClick(true)}
+                            >
+                              Đồng ý
+                            </button>
+                            <button
+                              className="px-3 py-1.5 rounded border border-slate-300 bg-white text-sm font-medium hover:bg-slate-50"
+                              onClick={() => onRespondDrawClick(false)}
+                            >
+                              Từ chối
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    <div className="text-sm text-slate-500">Người xem không thể thao tác.</div>
-                  )}
-                  {drawOfferedByMe && (
-                    <div className="text-sm text-blue-600">Bạn đã đề nghị hoà. Đang chờ đối thủ phản hồi…</div>
-                  )}
-                  {drawPendingForMe && (
-                    <div className="space-y-2">
-                      <div className="text-sm text-slate-700">
-                        {drawOfferFrom === "X" ? (playerX?.name || "Người chơi X") : (playerO?.name || "Người chơi O")} muốn hoà.
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          className="px-3 py-2 rounded bg-emerald-500 text-white hover:bg-emerald-600"
-                          onClick={() => onRespondDrawClick(true)}
-                        >
-                          Đồng ý
-                        </button>
-                        <button
-                          className="px-3 py-2 rounded border hover:bg-slate-100"
-                          onClick={() => onRespondDrawClick(false)}
-                        >
-                          Từ chối
-                        </button>
-                      </div>
+                    <div className="space-y-3">
+                      <div className="text-sm text-slate-500">Người xem không thể thao tác.</div>
+                      {drawPending && (
+                        <div className="text-sm text-slate-600 italic">
+                          Đang có lời đề nghị hoà chờ xử lý.
+                        </div>
+                      )}
                     </div>
                   )}
-                  {drawPending && !mySide && !drawPendingForMe && (
-                    <div className="text-sm text-slate-600">
-                      Đang có lời đề nghị hoà chờ xử lý.
-                    </div>
-                  )}
-                  <button className="px-4 py-2 rounded border" onClick={onLeave}>Rời phòng</button>
                 </div>
               )}
 
-              {room.status==="ROUND_END" && (
+              {room.status === "ROUND_END" && (
                 <div className="space-y-3">
                   <div>{resultMessage}</div>
                   {resultType === "SURRENDER" && surrenderedName && (
@@ -518,11 +591,10 @@ export default function GamePage() {
                       className={`flex ${isMine ? "justify-end" : "justify-start"}`}
                     >
                       <div
-                        className={`max-w-[80%] rounded-xl px-3.5 py-2.5 text-sm shadow-sm ${
-                          isMine
-                            ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white"
-                            : "bg-slate-100 text-slate-800 border border-slate-200"
-                        }`}
+                        className={`max-w-[80%] rounded-xl px-3.5 py-2.5 text-sm shadow-sm ${isMine
+                          ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white"
+                          : "bg-slate-100 text-slate-800 border border-slate-200"
+                          }`}
                       >
                         <div className="text-xs font-semibold opacity-80 mb-1">
                           {isMine ? "Bạn" : msg.name || "Người chơi"}
