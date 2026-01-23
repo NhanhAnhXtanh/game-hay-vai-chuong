@@ -12,11 +12,16 @@ export const ticTacToeGame: GameModule = {
       path: TIC_TAC_TOE_ROUTE_SEGMENT,
       children: [
         { index: true, element: <LobbyPage /> },
-        { path: "game/:roomId", element: <GamePage /> }
+        { path: "game/:roomId", element: <GamePage /> },
+        { path: "room/:inviteId", element: <GamePage /> }
       ]
     },
     {
       path: "game/:roomId",
+      element: <GamePage />
+    },
+    {
+      path: "room/:inviteId",
       element: <GamePage />
     }
   ]

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ensureAnon } from "../../shared/firebase";
-import { TIC_TAC_TOE_GAME_PATH } from "../constants";
+import { TIC_TAC_TOE_INVITE_PATH } from "../constants";
 import { createRoom } from "../services/roomService";
+import { encodeInviteToken } from "../services/inviteLink";
 
 export default function LobbyPage() {
   const nav = useNavigate();
@@ -20,18 +21,17 @@ export default function LobbyPage() {
     localStorage.setItem("player-name", playerName);
     await ensureAnon(playerName);
     const id = await createRoom("Phòng 20x20", password || undefined);
-    const base = `${TIC_TAC_TOE_GAME_PATH}/${id}`;
-    const url = password
-      ? `${base}?pw=${encodeURIComponent(password)}`
-      : base;
+    const token = await encodeInviteToken(id, password || undefined);
+    const url = `${TIC_TAC_TOE_INVITE_PATH}/${token}`;
     nav(url);
   }
 
-  function onJoin() {
+  async function onJoin() {
     if (!playerName.trim() || !roomId.trim()) return;
     localStorage.setItem("player-name", playerName);
-    const base = `${TIC_TAC_TOE_GAME_PATH}/${roomId.toUpperCase()}`;
-    const url = password ? `${base}?pw=${encodeURIComponent(password)}` : base;
+    const id = roomId.toUpperCase();
+    const token = await encodeInviteToken(id, password || undefined);
+    const url = `${TIC_TAC_TOE_INVITE_PATH}/${token}`;
     nav(url);
   }
 
