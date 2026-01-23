@@ -5,13 +5,19 @@ import {
   listenRoom, joinRoom, leaveRoom, placeMove,
   startRound, setReady, offerDraw, respondDraw, surrender, sendMessage, type Room
 } from "../services/roomService";
-import { TIC_TAC_TOE_GAME_PATH, TIC_TAC_TOE_HOME_PATH } from "../constants";
+import { TIC_TAC_TOE_HOME_PATH, TIC_TAC_TOE_INVITE_PATH } from "../constants";
+import { decodeInviteToken, encodeInviteToken } from "../services/inviteLink";
 import GameBoard from "../components/GameBoard";
 
 export default function GamePage() {
-  const { roomId } = useParams();
+  const params = useParams<{ roomId?: string; inviteId?: string }>();
+  const { roomId, inviteId } = params;
   const [sp] = useSearchParams();
-  const pw = sp.get("pw") || undefined;
+  const legacyPw = sp.get("pw") || undefined;
+
+  const [resolvedRoomId, setResolvedRoomId] = useState<string | null>(null);
+  const [resolvedPassword, setResolvedPassword] = useState<string | undefined>(undefined);
+  const [resolveError, setResolveError] = useState<string | null>(null);
 
   const nav = useNavigate();
   const [displayName, setDisplayName] = useState<string | null>(() => {
@@ -41,7 +47,41 @@ export default function GamePage() {
   }, [room, myUid]);
 
   useEffect(() => {
-    if (!displayName) return;
+    // Ưu tiên invite token mới, fallback về roomId + legacy pw (hỗ trợ link cũ)
+    if (inviteId) {
+      (async () => {
+        try {
+          const decoded = await decodeInviteToken(inviteId);
+          if (!decoded) {
+            console.error("Failed to decode token:", inviteId);
+            setResolveError("Link phòng không hợp lệ hoặc đã bị hỏng.");
+            setResolvedRoomId(null);
+            setResolvedPassword(undefined);
+          } else {
+            setResolveError(null);
+            setResolvedRoomId(decoded.roomId);
+            setResolvedPassword(decoded.password);
+          }
+        } catch (error) {
+          console.error("Token decode exception:", error);
+          setResolveError("Link phòng không hợp lệ hoặc đã bị hỏng.");
+          setResolvedRoomId(null);
+          setResolvedPassword(undefined);
+        }
+      })();
+    } else if (roomId) {
+      setResolveError(null);
+      setResolvedRoomId(roomId);
+      setResolvedPassword(legacyPw || undefined);
+    } else {
+      setResolveError("Thiếu thông tin phòng.");
+      setResolvedRoomId(null);
+      setResolvedPassword(undefined);
+    }
+  }, [inviteId, roomId, legacyPw]);
+
+  useEffect(() => {
+    if (!displayName || !resolvedRoomId) return;
     let off: (() => void) | null = null;
     (async () => {
       const me = await ensureAnon(displayName);
@@ -54,42 +94,47 @@ export default function GamePage() {
       }
       localStorage.setItem("player-name", effectiveName);
       try {
-        await joinRoom(roomId!, me.uid, effectiveName, pw);
+        await joinRoom(resolvedRoomId, me.uid, effectiveName, resolvedPassword);
         setJoinError(null);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Không thể tham gia phòng.";
         setJoinError(msg);
       }
-      off = listenRoom(roomId!, setRoom);
+      off = listenRoom(resolvedRoomId, setRoom);
     })();
     return () => { if (off) off(); };
-  }, [roomId, pw, displayName]);
+  }, [resolvedRoomId, resolvedPassword, displayName]);
 
   async function onMove(r: number, c: number) {
     if (!room || !mySide) return;
     if (room.status !== "PLAYING") return;
-    await placeMove(roomId!, mySide, r, c);
+    if (!resolvedRoomId) return;
+    await placeMove(resolvedRoomId, mySide, r, c);
   }
 
   async function onReadyClick() {
     if (!mySide || !room) return;
     const currentReady = room.players?.[mySide]?.ready ?? false;
-    await setReady(roomId!, mySide, !currentReady);
+    if (!resolvedRoomId) return;
+    await setReady(resolvedRoomId, mySide, !currentReady);
   }
 
   async function onRematchVote(ready: boolean) {
     if (!mySide || !room) return;
-    await setReady(roomId!, mySide, ready);
+    if (!resolvedRoomId) return;
+    await setReady(resolvedRoomId, mySide, ready);
   }
 
   async function onOfferDrawClick() {
     if (!mySide || !room) return;
-    await offerDraw(roomId!, mySide);
+    if (!resolvedRoomId) return;
+    await offerDraw(resolvedRoomId, mySide);
   }
 
   async function onRespondDrawClick(accept: boolean) {
     if (!mySide || !room) return;
-    await respondDraw(roomId!, mySide, accept);
+    if (!resolvedRoomId) return;
+    await respondDraw(resolvedRoomId, mySide, accept);
   }
 
   async function onSurrenderClick() {
@@ -102,18 +147,18 @@ export default function GamePage() {
       setShowLeaveConfirm(true);
       return;
     }
-    if (mySide) await leaveRoom(roomId!, mySide);
+    if (mySide && resolvedRoomId) await leaveRoom(resolvedRoomId, mySide);
     nav(TIC_TAC_TOE_HOME_PATH);
   }
 
   const bothReady = !!room?.players?.X?.ready && !!room?.players?.O?.ready;
 
   useEffect(() => {
-    if (!room || !mySide) return;
+    if (!room || !mySide || !resolvedRoomId) return;
     if ((room.status === "LOBBY" || room.status === "ROUND_END") && bothReady) {
-      startRound(roomId!);
+      startRound(resolvedRoomId);
     }
-  }, [room, bothReady, roomId, mySide]);
+  }, [room, bothReady, resolvedRoomId, mySide]);
 
   useEffect(() => {
     let showTimer: ReturnType<typeof setTimeout> | null = null;
@@ -158,11 +203,11 @@ export default function GamePage() {
   }, [room?.status]);
 
   async function onCopyRoomId() {
-    if (!roomId) return;
+    if (!resolvedRoomId) return;
     try {
       const origin = window.location.origin;
-      const base = `${origin}${TIC_TAC_TOE_GAME_PATH}/${roomId}`;
-      const link = pw ? `${base}?pw=${encodeURIComponent(pw)}` : base;
+      const token = await encodeInviteToken(resolvedRoomId, resolvedPassword);
+      const link = `${origin}${TIC_TAC_TOE_INVITE_PATH}/${token}`;
       await navigator.clipboard.writeText(link);
       setCopied(true);
       if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
@@ -262,7 +307,21 @@ export default function GamePage() {
     );
   }
 
-  if (!room) return <div className="p-6">Đang tải phòng…</div>;
+  if (resolveError) {
+    return (
+      <div className="p-6 space-y-3">
+        <div className="text-red-600 font-medium">{resolveError}</div>
+        <button
+          className="px-4 py-2 rounded border"
+          onClick={() => nav(TIC_TAC_TOE_HOME_PATH)}
+        >
+          Quay về sảnh
+        </button>
+      </div>
+    );
+  }
+
+  if (!room || !resolvedRoomId) return <div className="p-6">Đang tải phòng…</div>;
   const playerX = room.players?.X ?? null;
   const playerO = room.players?.O ?? null;
   const winningLine = room.winningLine ?? null;
@@ -292,11 +351,11 @@ export default function GamePage() {
 
   async function onChatSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!roomId || !myUid) return;
+    if (!resolvedRoomId || !myUid) return;
     const text = chatDraft.trim();
     if (!text) return;
     try {
-      await sendMessage(roomId, {
+      await sendMessage(resolvedRoomId, {
         uid: myUid,
         name: myDisplayName,
         text
@@ -368,13 +427,19 @@ export default function GamePage() {
       )}
       <div className="space-y-4">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">Phòng {roomId}</h1>
+          <h1 className="text-2xl font-bold">Phòng {resolvedRoomId}</h1>
           <div className="flex items-center gap-2">
             <button
               className="px-3 py-2 rounded border hover:bg-slate-100"
               onClick={onCopyRoomId}
             >
               {copied ? "Đã sao chép!" : "Copy link"}
+            </button>
+            <button
+              className="px-3 py-2 rounded border border-red-400 text-red-600 hover:bg-red-50"
+              onClick={onLeave}
+            >
+              Rời phòng
             </button>
           </div>
         </div>
@@ -475,8 +540,10 @@ export default function GamePage() {
                             <button
                               className="px-3 py-1.5 rounded bg-red-600 text-white text-sm font-medium hover:bg-red-700"
                               onClick={async () => {
-                                await surrender(roomId!, mySide!);
-                                setShowSurrenderConfirm(false);
+                                if (resolvedRoomId && mySide) {
+                                  await surrender(resolvedRoomId, mySide);
+                                  setShowSurrenderConfirm(false);
+                                }
                               }}
                             >
                               Đồng ý
@@ -500,8 +567,10 @@ export default function GamePage() {
                             <button
                               className="px-3 py-1.5 rounded bg-orange-600 text-white text-sm font-medium hover:bg-orange-700"
                               onClick={async () => {
-                                if (mySide) await leaveRoom(roomId!, mySide);
-                                nav(TIC_TAC_TOE_HOME_PATH);
+                                if (mySide && resolvedRoomId) {
+                                  await leaveRoom(resolvedRoomId, mySide);
+                                  nav(TIC_TAC_TOE_HOME_PATH);
+                                }
                               }}
                             >
                               Đồng ý
