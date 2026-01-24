@@ -20,6 +20,7 @@ import type { ChessSide, HistoryMove } from "../logic/chessLogic";
 import { boardFromMoves } from "../logic/chessLogic";
 import { chessAuth } from "../../shared/firebase";
 import { CHESS_HOME_PATH } from "../constants";
+import Loading from "../../../components/Loading";
 
 const NAME_KEY = "chess-player-name";
 
@@ -247,20 +248,100 @@ export default function ChessGamePage() {
     }
   }, [room?.players?.white?.uid, room?.players?.black?.uid, side]);
 
+  if (!roomId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4 py-6 sm:px-6 lg:px-8">
+        <div className="w-full max-w-md sm:max-w-lg rounded-2xl bg-white p-6 sm:p-8 shadow-xl border border-slate-200 space-y-6 sm:space-y-8 text-center">
+          <div className="space-y-3 sm:space-y-4">
+            <div className="mx-auto w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-red-100 flex items-center justify-center">
+              <svg
+                className="w-8 h-8 sm:w-10 sm:h-10 text-red-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
+              </svg>
+            </div>
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">
+              URL không hợp lệ
+            </h1>
+            <p className="text-sm sm:text-base text-slate-600 leading-relaxed max-w-md mx-auto">
+              Thiếu thông tin phòng. Vui lòng kiểm tra lại link hoặc yêu cầu người tạo phòng gửi link mới.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
+            <button
+              className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-3.5 rounded-lg sm:rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm sm:text-base font-semibold hover:from-indigo-700 hover:to-purple-700 active:scale-[0.98] transition-all shadow-md hover:shadow-lg"
+              onClick={() => navigate(CHESS_HOME_PATH)}
+            >
+              Quay về trang chủ
+            </button>
+            <button
+              className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-3.5 rounded-lg sm:rounded-xl border-2 border-slate-300 text-slate-700 text-sm sm:text-base font-semibold hover:bg-slate-50 active:scale-[0.98] transition-all"
+              onClick={() => window.location.reload()}
+            >
+              Thử lại
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
-    return <p className="text-center text-gray-600">Loading chess room...</p>;
+    return <Loading message="Đang tải phòng cờ vua..." />;
   }
 
   if (!room) {
     return (
-      <div className="text-center space-y-3">
-        <p className="text-2xl font-semibold text-gray-900">Room not found.</p>
-        <button
-          className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white"
-          onClick={() => navigate(CHESS_HOME_PATH)}
-        >
-          Back to lobby
-        </button>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4 py-6 sm:px-6 lg:px-8">
+        <div className="w-full max-w-md sm:max-w-lg rounded-2xl bg-white p-6 sm:p-8 shadow-xl border border-slate-200 space-y-6 sm:space-y-8 text-center">
+          <div className="space-y-3 sm:space-y-4">
+            <div className="mx-auto w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-red-100 flex items-center justify-center">
+              <svg
+                className="w-8 h-8 sm:w-10 sm:h-10 text-red-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
+              </svg>
+            </div>
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">
+              URL không hợp lệ
+            </h1>
+            <p className="text-sm sm:text-base text-slate-600 leading-relaxed max-w-md mx-auto">
+              Phòng không tồn tại hoặc link đã bị hỏng. Vui lòng kiểm tra lại link hoặc yêu cầu người tạo phòng gửi link mới.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
+            <button
+              className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-3.5 rounded-lg sm:rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm sm:text-base font-semibold hover:from-indigo-700 hover:to-purple-700 active:scale-[0.98] transition-all shadow-md hover:shadow-lg"
+              onClick={() => navigate(CHESS_HOME_PATH)}
+            >
+              Quay về trang chủ
+            </button>
+            <button
+              className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-3.5 rounded-lg sm:rounded-xl border-2 border-slate-300 text-slate-700 text-sm sm:text-base font-semibold hover:bg-slate-50 active:scale-[0.98] transition-all"
+              onClick={() => window.location.reload()}
+            >
+              Thử lại
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

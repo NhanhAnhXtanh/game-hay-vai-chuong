@@ -1,5 +1,6 @@
 import type { Room } from "../services/roomService";
 import { Button } from "../ui/button";
+import Loading from "../../../components/Loading";
 
 export default function GameStatus({
   status, currentTurnName, winner, onReady, mySide, room, onPlayAgain, onLeave
@@ -13,7 +14,7 @@ export default function GameStatus({
   onPlayAgain: ()=>void;
   onLeave: ()=>void;
 }) {
-  if (!room) return <p>Đang tải...</p>;
+  if (!room) return <Loading message="Đang tải..." fullScreen={false} showProgress={false} />;
 
   if (status === "LOBBY") {
     const myReady = mySide ? room.players[mySide!]?.ready : false;
