@@ -87,7 +87,7 @@ export default function ErrorPage() {
           <p className="text-sm sm:text-base text-slate-600 leading-relaxed max-w-md mx-auto">
             {errorMessage}
           </p>
-          {error instanceof Error && process.env.NODE_ENV === "development" && (
+          {error instanceof Error && import.meta.env.MODE === "development" && (
             <details className="mt-4 text-left">
               <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-700">
                 Chi tiết lỗi (chế độ phát triển)

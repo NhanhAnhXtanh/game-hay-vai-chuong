@@ -79,7 +79,7 @@ function ErrorFallback({
           <p className="text-sm sm:text-base text-slate-600 leading-relaxed max-w-md mx-auto">
             Ứng dụng gặp sự cố không mong muốn. Vui lòng thử lại hoặc quay về trang chủ.
           </p>
-          {error && process.env.NODE_ENV === "development" && (
+          {error && import.meta.env.MODE === "development" && (
             <details className="mt-4 text-left">
               <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-700">
                 Chi tiết lỗi (chế độ phát triển)

@@ -8,11 +8,20 @@ import { chessGame } from "../games/chess";
 
 // Helper function to recursively add errorElement to routes
 function addErrorElementToRoutes(routes: RouteObject[]): RouteObject[] {
-  return routes.map(route => ({
-    ...route,
-    errorElement: <ErrorPage />,
-    children: route.children ? addErrorElementToRoutes(route.children) : undefined
-  }));
+  return routes.map(route => {
+    // Create a new route object with errorElement
+    const newRoute = {
+      ...route,
+      errorElement: <ErrorPage />
+    } as RouteObject;
+    
+    // Recursively add errorElement to children if they exist
+    if (route.children && Array.isArray(route.children)) {
+      newRoute.children = addErrorElementToRoutes(route.children);
+    }
+    
+    return newRoute;
+  });
 }
 
 const gameRoutes: RouteObject[] = addErrorElementToRoutes([...ticTacToeGame.routes, ...chessGame.routes]);
