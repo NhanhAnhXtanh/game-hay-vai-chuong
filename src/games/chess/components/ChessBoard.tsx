@@ -2,6 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import type { PieceSymbol, Square } from "chess.js";
 import { createChess, looseMovesFrom, type ChessSide, type LooseMove, type BoardMatrix } from "../logic/chessLogic";
 
+const PROMOTION_PIECES: PieceSymbol[] = ["q", "r", "b", "n"];
+const PROMOTION_UNICODE: Record<"w" | "b", Record<PieceSymbol, string>> = {
+  w: { k: "♔", q: "♕", r: "♖", b: "♗", n: "♘", p: "♙" },
+  b: { k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟︎" }
+};
+const PROMOTION_LABEL: Record<PieceSymbol, string> = {
+  q: "Hậu", r: "Xe", b: "Tượng", n: "Mã", k: "", p: ""
+};
+
 interface ChessBoardProps {
   fen: string;
   board: BoardMatrix;
@@ -19,14 +28,19 @@ export default function ChessBoard({ fen, board, perspective, canMove, lastMove,
   const chess = useMemo(() => createChess(fen), [fen]);
   const [selected, setSelected] = useState<Square | null>(null);
   const [legalMoves, setLegalMoves] = useState<LooseMove[]>([]);
+  const [promotionPrompt, setPromotionPrompt] = useState<{ from: Square; to: Square } | null>(null);
+
+  const myColor: "w" | "b" = perspective === "white" ? "w" : "b";
 
   useEffect(() => {
     setSelected(null);
     setLegalMoves([]);
+    setPromotionPrompt(null);
   }, [fen]);
 
   function handleSquareClick(square: Square) {
     if (!canMove) return;
+    if (promotionPrompt) return;
     if (selected === square) {
       setSelected(null);
       setLegalMoves([]);
@@ -34,7 +48,6 @@ export default function ChessBoard({ fen, board, perspective, canMove, lastMove,
     }
 
     const piece = chess.get(square);
-    const myColor = perspective === "white" ? "w" : "b";
 
     if (piece && piece.color === myColor) {
       setSelected(square);
@@ -43,13 +56,26 @@ export default function ChessBoard({ fen, board, perspective, canMove, lastMove,
     }
 
     if (selected) {
-      const candidate = legalMoves.find(m => m.to === square);
-      if (candidate) {
-        onMove(selected, candidate.to, candidate.promotion);
-        setSelected(null);
-        setLegalMoves([]);
+      const matches = legalMoves.filter(m => m.to === square);
+      if (!matches.length) return;
+      const promotions = matches.filter(m => m.promotion);
+      if (promotions.length > 1) {
+        setPromotionPrompt({ from: selected, to: square });
+        return;
       }
+      const candidate = matches[0];
+      onMove(selected, candidate.to, candidate.promotion);
+      setSelected(null);
+      setLegalMoves([]);
     }
+  }
+
+  function choosePromotion(piece: PieceSymbol) {
+    if (!promotionPrompt) return;
+    onMove(promotionPrompt.from, promotionPrompt.to, piece);
+    setPromotionPrompt(null);
+    setSelected(null);
+    setLegalMoves([]);
   }
 
   const displayRanks = perspective === "white" ? ranks : [...ranks].reverse();
@@ -106,6 +132,36 @@ export default function ChessBoard({ fen, board, perspective, canMove, lastMove,
         <span>{perspective === "white" ? "Góc nhìn quân Trắng" : "Góc nhìn quân Đen"}</span>
         {helperText && <span>{helperText}</span>}
       </div>
+      {promotionPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl space-y-4">
+            <div className="text-center">
+              <h3 className="text-lg font-semibold text-gray-900">Chọn quân phong cấp</h3>
+              <p className="text-sm text-gray-500 mt-1">Tốt đã tới hàng cuối — chọn quân để phong cấp.</p>
+            </div>
+            <div className="grid grid-cols-4 gap-3">
+              {PROMOTION_PIECES.map(piece => (
+                <button
+                  key={piece}
+                  type="button"
+                  onClick={() => choosePromotion(piece)}
+                  className="flex flex-col items-center gap-1 rounded-xl border border-gray-200 bg-white py-3 hover:border-indigo-300 hover:bg-indigo-50 transition"
+                >
+                  <span className="text-3xl">{PROMOTION_UNICODE[myColor][piece]}</span>
+                  <span className="text-xs text-gray-600">{PROMOTION_LABEL[piece]}</span>
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setPromotionPrompt(null)}
+              className="w-full rounded-xl border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+            >
+              Hủy
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
