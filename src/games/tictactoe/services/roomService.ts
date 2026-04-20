@@ -1,6 +1,7 @@
 import { db } from "../../shared/firebase";
 import {
-  ref, set, get, update, onValue, runTransaction, serverTimestamp, off, push
+  ref, set, get, update, onValue, runTransaction, serverTimestamp, off, push,
+  query, limitToLast
 } from "firebase/database";
 import { nanoid } from "nanoid";
 import { emptyBoard, findWinningLine, SIZE, type Cell, type BoardCoord } from "../logic/gameLogic";
@@ -118,6 +119,29 @@ export function listenRoom(roomId: string, cb: (room: Room | null) => void) {
   const roomRef = ref(db, `rooms/${roomId}`);
   const unsub = onValue(roomRef, s => cb(s.val()));
   return () => { off(roomRef); unsub(); };
+}
+
+export function listenMessages(
+  roomId: string,
+  cb: (messages: ChatMessage[]) => void,
+  limit = 50
+) {
+  const msgRef = ref(db, `rooms/${roomId}/messages`);
+  const q = query(msgRef, limitToLast(limit));
+  const unsub = onValue(q, snap => {
+    const raw = (snap.val() ?? {}) as Record<string, ChatMessageRecord>;
+    const list = Object.entries(raw)
+      .map(([id, msg]) => ({
+        id,
+        uid: msg?.uid ?? "",
+        name: msg?.name ?? "Người chơi",
+        text: msg?.text ?? "",
+        createdAt: typeof msg?.createdAt === "number" ? msg.createdAt : 0
+      }))
+      .sort((a, b) => a.createdAt - b.createdAt);
+    cb(list);
+  });
+  return () => { off(msgRef); unsub(); };
 }
 
 export async function setReady(roomId: string, side: "X" | "O", ready: boolean) {

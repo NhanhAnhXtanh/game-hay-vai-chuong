@@ -2,8 +2,9 @@ import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ensureAnon } from "../../shared/firebase";
 import {
-  listenRoom, joinRoom, leaveRoom, placeMove,
-  startRound, setReady, offerDraw, respondDraw, surrender, sendMessage, type Room
+  listenRoom, listenMessages, joinRoom, leaveRoom, placeMove,
+  startRound, setReady, offerDraw, respondDraw, surrender, sendMessage,
+  type Room, type ChatMessage
 } from "../services/roomService";
 import { TIC_TAC_TOE_HOME_PATH, TIC_TAC_TOE_INVITE_PATH } from "../constants";
 import { decodeInviteToken, encodeInviteToken } from "../services/inviteLink";
@@ -28,6 +29,7 @@ export default function GamePage() {
   const [nameDraft, setNameDraft] = useState(() => displayName ?? "");
   const [nameError, setNameError] = useState<string | null>(null);
   const [room, setRoom] = useState<Room | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [myUid, setMyUid] = useState<string | null>(null);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [showWinModal, setShowWinModal] = useState(false);
@@ -105,6 +107,13 @@ export default function GamePage() {
     })();
     return () => { if (off) off(); };
   }, [resolvedRoomId, resolvedPassword, displayName]);
+
+  useEffect(() => {
+    if (!resolvedRoomId) return;
+    setMessages([]);
+    const off = listenMessages(resolvedRoomId, setMessages, 50);
+    return () => off();
+  }, [resolvedRoomId]);
 
   async function onMove(r: number, c: number) {
     if (!room || !mySide) return;
@@ -235,19 +244,6 @@ export default function GamePage() {
     }
   }, [room?.players, mySide, displayName]);
 
-  const messages = useMemo(() => {
-    const raw = room?.messages ?? {};
-    return Object.entries(raw)
-      .map(([id, msg]) => ({
-        id,
-        uid: msg?.uid ?? "",
-        name: msg?.name ?? "Người chơi",
-        text: msg?.text ?? "",
-        createdAt: typeof msg?.createdAt === "number" ? msg.createdAt : 0
-      }))
-      .sort((a, b) => a.createdAt - b.createdAt)
-      .slice(-200);
-  }, [room?.messages]);
   const myDisplayName = useMemo(() => {
     if (mySide && room?.players?.[mySide]?.name) return room.players[mySide]!.name;
     return displayName ?? "Player";
@@ -468,18 +464,18 @@ export default function GamePage() {
           </div>
         </div>
       )}
-      <div className="space-y-4">
-        <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">Phòng {resolvedRoomId}</h1>
-          <div className="flex items-center gap-2">
+      <div className="space-y-4 md:space-y-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="text-xl sm:text-2xl font-bold break-all">Phòng {resolvedRoomId}</h1>
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
             <button
-              className="px-3 py-2 rounded border hover:bg-slate-100"
+              className="px-3 py-2 rounded border hover:bg-slate-100 text-sm sm:text-base"
               onClick={onCopyRoomId}
             >
               {copied ? "Đã sao chép!" : "Copy link"}
             </button>
             <button
-              className="px-3 py-2 rounded border border-red-400 text-red-600 hover:bg-red-50"
+              className="px-3 py-2 rounded border border-red-400 text-red-600 hover:bg-red-50 text-sm sm:text-base"
               onClick={onLeave}
             >
               Rời phòng
@@ -487,8 +483,8 @@ export default function GamePage() {
           </div>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-6">
-          <div className="md:col-span-2 rounded-xl border p-6 bg-white">
+        <div className="grid gap-4 md:gap-5 lg:grid-cols-3">
+          <div className="lg:col-span-2 rounded-xl border p-3 sm:p-4 md:p-5 bg-white">
             <GameBoard
               board={room.board}
               onMove={onMove}
@@ -497,8 +493,8 @@ export default function GamePage() {
             />
           </div>
 
-          <div className="space-y-4">
-            <div className="rounded-xl border p-4 bg-white">
+          <div className="space-y-4 md:space-y-5">
+            <div className="rounded-xl border p-3 sm:p-4 bg-white">
               <h3 className="font-semibold mb-2">Người chơi</h3>
               <div className="p-3 rounded mb-3 bg-blue-50">
                 <div className="flex justify-between">
@@ -524,7 +520,7 @@ export default function GamePage() {
               </div>
             </div>
 
-            <div className="rounded-xl border p-4 bg-white space-y-3">
+            <div className="rounded-xl border p-3 sm:p-4 bg-white space-y-3">
               {room.status === "LOBBY" && (
                 <>
                   <div>Trạng thái: Phòng chờ</div>
@@ -686,7 +682,7 @@ export default function GamePage() {
               )}
             </div>
 
-            <div className="rounded-xl border p-4 bg-white flex flex-col h-[min(55vh,22rem)] md:h-[28rem]">
+            <div className="rounded-xl border p-3 sm:p-4 bg-white flex flex-col h-[52vh] min-h-[18rem] max-h-[24rem] md:h-[26rem] xl:h-[28rem]">
               <h3 className="font-semibold mb-2">Trò chuyện</h3>
               <div
                 ref={chatListRef}
