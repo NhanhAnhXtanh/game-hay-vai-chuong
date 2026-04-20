@@ -36,12 +36,12 @@ export default function LobbyPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <h1 className="text-4xl font-bold">Gomoku 20×20</h1>
+    <div className="max-w-3xl mx-auto space-y-4 sm:space-y-6">
+      <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold">Gomoku 20×20</h1>
 
-      <div className="grid md:grid-cols-2 gap-6">
-        <div className="rounded-xl border p-6 bg-white">
-          <h2 className="text-xl font-semibold mb-4">Tạo phòng</h2>
+      <div className="grid md:grid-cols-2 gap-3 sm:gap-4 md:gap-6">
+        <div className="rounded-xl border p-4 sm:p-5 md:p-6 bg-white">
+          <h2 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4">Tạo phòng</h2>
           <input className="w-full mb-3 border rounded px-3 py-2"
                  placeholder="Tên của bạn"
                  value={playerName} onChange={e=>setPlayerName(e.target.value)} />
@@ -54,8 +54,8 @@ export default function LobbyPage() {
           </button>
         </div>
 
-        <div className="rounded-xl border p-6 bg-white">
-          <h2 className="text-xl font-semibold mb-4">Vào phòng</h2>
+        <div className="rounded-xl border p-4 sm:p-5 md:p-6 bg-white">
+          <h2 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4">Vào phòng</h2>
           <input className="w-full mb-3 border rounded px-3 py-2"
                  placeholder="Tên của bạn"
                  value={playerName} onChange={e=>setPlayerName(e.target.value)} />

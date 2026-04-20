@@ -76,7 +76,7 @@ export default function GameBoard({
           className="relative w-full"
           style={{ maxWidth: "min(100%, 720px)", aspectRatio: "1 / 1" }}
         >
-          <div className="absolute inset-0 bg-slate-100 border-4 border-slate-500 p-2 shadow-sm box-border rounded-md">
+          <div className="absolute inset-0 bg-slate-100 border-2 sm:border-4 border-slate-500 p-1 sm:p-2 shadow-sm box-border rounded-md">
             <div
               className="h-full w-full grid"
               style={{

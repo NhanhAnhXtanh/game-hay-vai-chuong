@@ -484,9 +484,9 @@ export default function GamePage() {
       )}
       {showWinModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl space-y-4 text-center">
-            <h2 className="text-xl font-semibold">Ván đấu kết thúc</h2>
-            <div className="text-lg font-medium">{resultMessage}</div>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-4 sm:p-6 shadow-xl space-y-3 sm:space-y-4 text-center">
+            <h2 className="text-lg sm:text-xl font-semibold">Ván đấu kết thúc</h2>
+            <div className="text-base sm:text-lg font-medium">{resultMessage}</div>
             {resultType === "SURRENDER" && surrenderedName && (
               <div className="text-sm text-slate-600">Người đầu hàng: {surrenderedName}</div>
             )}
@@ -801,7 +801,7 @@ export default function GamePage() {
               )}
             </div>
 
-            <div className="rounded-xl border p-3 sm:p-4 bg-white flex flex-col h-[52vh] min-h-[18rem] max-h-[24rem] md:h-[26rem] xl:h-[28rem]">
+            <div className="rounded-xl border p-3 sm:p-4 bg-white flex flex-col h-[40vh] min-h-[14rem] max-h-[20rem] sm:h-[52vh] sm:min-h-[18rem] sm:max-h-[24rem] md:h-[26rem] xl:h-[28rem]">
               <h3 className="font-semibold mb-2">Trò chuyện</h3>
               <div
                 ref={chatListRef}
