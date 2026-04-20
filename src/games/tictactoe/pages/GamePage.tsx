@@ -4,6 +4,7 @@ import { ensureAnon } from "../../shared/firebase";
 import {
   listenRoom, listenMessages, joinRoom, leaveRoom, placeMove,
   startRound, setReady, offerDraw, respondDraw, surrender, sendMessage,
+  claimTimeout, offerUndo, respondUndo, TURN_MS,
   type Room, type ChatMessage
 } from "../services/roomService";
 import { TIC_TAC_TOE_HOME_PATH, TIC_TAC_TOE_INVITE_PATH } from "../constants";
@@ -41,6 +42,8 @@ export default function GamePage() {
   const chatListRef = useRef<HTMLDivElement | null>(null);
   const [showSurrenderConfirm, setShowSurrenderConfirm] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const timeoutClaimedRef = useRef<number | null>(null);
 
   const mySide = useMemo<"X" | "O" | null>(() => {
     if (!room || !myUid) return null;
@@ -115,6 +118,21 @@ export default function GamePage() {
     return () => off();
   }, [resolvedRoomId]);
 
+  useEffect(() => {
+    if (room?.status !== "PLAYING" || !room?.turnDeadline) return;
+    const id = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(id);
+  }, [room?.status, room?.turnDeadline]);
+
+  useEffect(() => {
+    if (!resolvedRoomId) return;
+    if (room?.status !== "PLAYING" || !room?.turnDeadline) return;
+    if (now < room.turnDeadline) return;
+    if (timeoutClaimedRef.current === room.turnDeadline) return;
+    timeoutClaimedRef.current = room.turnDeadline;
+    claimTimeout(resolvedRoomId).catch(() => {});
+  }, [now, room?.status, room?.turnDeadline, resolvedRoomId]);
+
   async function onMove(r: number, c: number) {
     if (!room || !mySide) return;
     if (room.status !== "PLAYING") return;
@@ -145,6 +163,16 @@ export default function GamePage() {
     if (!mySide || !room) return;
     if (!resolvedRoomId) return;
     await respondDraw(resolvedRoomId, mySide, accept);
+  }
+
+  async function onOfferUndoClick() {
+    if (!mySide || !resolvedRoomId) return;
+    await offerUndo(resolvedRoomId, mySide);
+  }
+
+  async function onRespondUndoClick(accept: boolean) {
+    if (!mySide || !resolvedRoomId) return;
+    await respondUndo(resolvedRoomId, mySide, accept);
   }
 
   async function onSurrenderClick() {
@@ -370,6 +398,24 @@ export default function GamePage() {
   const drawOfferedByMe = !!mySide && drawOfferFrom === mySide;
   const drawPendingForMe = !!mySide && drawOfferFrom !== null && drawOfferFrom !== mySide;
   const drawPending = drawOfferFrom !== null;
+  const undoOfferFrom = room.undoOffer?.from ?? null;
+  const undoOfferedByMe = !!mySide && undoOfferFrom === mySide;
+  const undoPendingForMe = !!mySide && undoOfferFrom !== null && undoOfferFrom !== mySide;
+  const undoPending = undoOfferFrom !== null;
+  const canOfferUndo =
+    !!mySide &&
+    room.status === "PLAYING" &&
+    !undoPending &&
+    !!room.lastMove &&
+    room.lastMove.by === mySide;
+  const turnDeadline = room.turnDeadline ?? null;
+  const turnRemainingMs =
+    room.status === "PLAYING" && turnDeadline
+      ? Math.max(0, turnDeadline - now)
+      : null;
+  const turnRemainingSec =
+    turnRemainingMs !== null ? Math.ceil(turnRemainingMs / 1000) : null;
+  const turnLow = turnRemainingMs !== null && turnRemainingMs <= 10_000;
   const resultType = room.endedBy?.type ?? (room.winner ? "WIN" : null);
   const resultBy = room.endedBy?.by ?? null;
   const surrenderedName =
@@ -382,6 +428,10 @@ export default function GamePage() {
     if (resultType === "SURRENDER") {
       const winnerLabel = winnerName ?? (room.winner ? `Người chơi ${room.winner}` : "Đối thủ");
       return `${winnerLabel} thắng (đối phương đầu hàng).`;
+    }
+    if (resultType === "TIMEOUT") {
+      const winnerLabel = winnerName ?? (room.winner ? `Người chơi ${room.winner}` : "Đối thủ");
+      return `${winnerLabel} thắng (đối phương hết giờ).`;
     }
     if (winnerName) return `${winnerName} thắng (${room.winner}).`;
     if (room.winner) return `Người thắng: ${room.winner}.`;
@@ -546,6 +596,11 @@ export default function GamePage() {
                   <div className="text-sm text-slate-600">
                     {mySide ? (room.turn === mySide ? "Đến lượt bạn." : "Chờ đối phương.") : "Bạn đang xem."}
                   </div>
+                  {turnRemainingSec !== null && (
+                    <div className={`text-sm font-mono ${turnLow ? "text-red-600 font-semibold" : "text-slate-700"}`}>
+                      ⏱ Thời gian còn lại: {turnRemainingSec}s / {Math.round(TURN_MS / 1000)}s
+                    </div>
+                  )}
                   {mySide ? (
                     <div className="space-y-3 pt-1">
                       {!showSurrenderConfirm && !showLeaveConfirm && (
@@ -556,6 +611,14 @@ export default function GamePage() {
                             disabled={drawPending}
                           >
                             Xin hoà
+                          </button>
+                          <button
+                            className="px-3 py-2 rounded border bg-white hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                            onClick={onOfferUndoClick}
+                            disabled={!canOfferUndo}
+                            title={!canOfferUndo ? "Chỉ có thể xin huỷ nước đi của chính bạn" : ""}
+                          >
+                            Xin huỷ nước
                           </button>
                           <button
                             className="px-3 py-2 rounded border border-red-400 text-red-600 hover:bg-red-50"
@@ -624,6 +687,30 @@ export default function GamePage() {
                         </div>
                       )}
 
+                      {undoOfferedByMe && (
+                        <div className="text-sm text-amber-600">Bạn đã xin huỷ nước. Đang chờ đối thủ phản hồi…</div>
+                      )}
+                      {undoPendingForMe && (
+                        <div className="space-y-2 p-3 rounded-lg border border-amber-200 bg-amber-50">
+                          <div className="text-sm text-amber-800 font-medium">
+                            {undoOfferFrom === "X" ? (playerX?.name || "Người chơi X") : (playerO?.name || "Người chơi O")} muốn huỷ nước đi vừa rồi.
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              className="px-3 py-1.5 rounded bg-amber-500 text-white text-sm font-medium hover:bg-amber-600"
+                              onClick={() => onRespondUndoClick(true)}
+                            >
+                              Đồng ý
+                            </button>
+                            <button
+                              className="px-3 py-1.5 rounded border border-slate-300 bg-white text-sm font-medium hover:bg-slate-50"
+                              onClick={() => onRespondUndoClick(false)}
+                            >
+                              Từ chối
+                            </button>
+                          </div>
+                        </div>
+                      )}
                       {drawOfferedByMe && (
                         <div className="text-sm text-blue-600">Bạn đã đề nghị hoà. Đang chờ đối thủ phản hồi…</div>
                       )}

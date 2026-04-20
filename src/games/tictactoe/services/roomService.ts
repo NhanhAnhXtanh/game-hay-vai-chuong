@@ -8,6 +8,8 @@ import { emptyBoard, findWinningLine, SIZE, type Cell, type BoardCoord } from ".
 
 export type RoomStatus = "LOBBY" | "PLAYING" | "ROUND_END" | "DECISION" | "CLOSED";
 
+export const TURN_MS = 30_000;
+
 export interface Player {
   uid: string;
   name: string;
@@ -38,7 +40,9 @@ export interface Room {
   lastMove: { r: number; c: number; by: "X" | "O" } | null;
   winningLine: BoardCoord[] | null;
   drawOffer: { from: "X" | "O" } | null;
-  endedBy: { type: "WIN" | "DRAW" | "SURRENDER"; by: "X" | "O" | null } | null;
+  undoOffer: { from: "X" | "O" } | null;
+  turnDeadline: number | null;
+  endedBy: { type: "WIN" | "DRAW" | "SURRENDER" | "TIMEOUT"; by: "X" | "O" | null } | null;
   messages?: Record<string, ChatMessageRecord>;
   createdAt: number | object;
   updatedAt: number | object;
@@ -60,6 +64,8 @@ export async function createRoom(name: string, password?: string) {
     lastMove: null,
     winningLine: null,
     drawOffer: null,
+    undoOffer: null,
+    turnDeadline: null,
     endedBy: null,
     messages: {},
     createdAt: Date.now(),
@@ -187,6 +193,8 @@ export async function respondDraw(roomId: string, side: "X" | "O", accept: boole
       room.status = "ROUND_END";
       room.winner = null;
       room.winningLine = null;
+      room.turnDeadline = null;
+      room.undoOffer = null;
       room.endedBy = { type: "DRAW", by: room.drawOffer.from };
       if (room.players?.X) room.players.X.score = (room.players.X.score ?? 0) + 1;
       if (room.players?.O) room.players.O.score = (room.players.O.score ?? 0) + 1;
@@ -208,6 +216,8 @@ export async function surrender(roomId: string, side: "X" | "O") {
     room.winner = opponent;
     room.winningLine = null;
     room.drawOffer = null;
+    room.undoOffer = null;
+    room.turnDeadline = null;
     room.endedBy = { type: "SURRENDER", by: side };
     if (room.players?.[opponent]) {
       room.players[opponent]!.score = (room.players[opponent]!.score ?? 0) + 1;
@@ -237,6 +247,8 @@ export async function startRound(roomId: string) {
     room.lastMove = null;
     room.winningLine = null;
     room.drawOffer = null;
+    room.undoOffer = null;
+    room.turnDeadline = Date.now() + TURN_MS;
     room.endedBy = null;
     if (room.players.X) room.players.X.ready = false;
     if (room.players.O) room.players.O.ready = false;
@@ -263,6 +275,8 @@ export async function leaveRoom(roomId: string, side: "X" | "O") {
     room.lastMove = null;
     room.winningLine = null;
     room.drawOffer = null;
+    room.undoOffer = null;
+    room.turnDeadline = null;
     room.endedBy = null;
     room.updatedAt = serverTimestamp() as unknown as number;
     return room;
@@ -290,13 +304,77 @@ export async function placeMove(roomId: string, side: "X" | "O", r: number, c: n
       room.status = "ROUND_END";
       room.winningLine = winLine;
       room.endedBy = { type: "WIN", by: side };
+      room.turnDeadline = null;
       if (room.players[side]) room.players[side]!.score = (room.players[side]!.score ?? 0) + 1;
     } else {
       room.turn = side === "X" ? "O" : "X";
       room.winningLine = null;
       room.endedBy = null;
+      room.turnDeadline = Date.now() + TURN_MS;
     }
     room.drawOffer = null;
+    room.undoOffer = null;
+    room.updatedAt = serverTimestamp() as unknown as number;
+    return room;
+  });
+}
+
+export async function claimTimeout(roomId: string) {
+  const roomRef = ref(db, `rooms/${roomId}`);
+  await runTransaction(roomRef, (room: Room | null) => {
+    if (!room) return room;
+    if (room.status !== "PLAYING") return room;
+    if (!room.turnDeadline) return room;
+    if (Date.now() < room.turnDeadline) return room;
+    const loser = room.turn;
+    const opponent = loser === "X" ? "O" : "X";
+    room.status = "ROUND_END";
+    room.winner = opponent;
+    room.winningLine = null;
+    room.drawOffer = null;
+    room.undoOffer = null;
+    room.turnDeadline = null;
+    room.endedBy = { type: "TIMEOUT", by: loser };
+    if (room.players?.[opponent]) {
+      room.players[opponent]!.score = (room.players[opponent]!.score ?? 0) + 1;
+    }
+    room.updatedAt = serverTimestamp() as unknown as number;
+    return room;
+  });
+}
+
+export async function offerUndo(roomId: string, side: "X" | "O") {
+  const roomRef = ref(db, `rooms/${roomId}`);
+  await runTransaction(roomRef, (room: Room | null) => {
+    if (!room) return room;
+    if (room.status !== "PLAYING") return room;
+    if (room.undoOffer) return room;
+    if (!room.lastMove || room.lastMove.by !== side) return room;
+    room.undoOffer = { from: side };
+    room.updatedAt = serverTimestamp() as unknown as number;
+    return room;
+  });
+}
+
+export async function respondUndo(roomId: string, side: "X" | "O", accept: boolean) {
+  const roomRef = ref(db, `rooms/${roomId}`);
+  await runTransaction(roomRef, (room: Room | null) => {
+    if (!room) return room;
+    if (room.status !== "PLAYING") return room;
+    if (!room.undoOffer) return room;
+    if (room.undoOffer.from === side) return room;
+
+    if (accept && room.lastMove && room.lastMove.by === room.undoOffer.from) {
+      const { r, c, by } = room.lastMove;
+      const b = room.board.map(row => row.slice());
+      if (b[r] && b[r][c] === by) b[r][c] = ".";
+      room.board = b as Cell[][];
+      room.turn = by;
+      room.lastMove = null;
+      room.turnDeadline = Date.now() + TURN_MS;
+    }
+
+    room.undoOffer = null;
     room.updatedAt = serverTimestamp() as unknown as number;
     return room;
   });
