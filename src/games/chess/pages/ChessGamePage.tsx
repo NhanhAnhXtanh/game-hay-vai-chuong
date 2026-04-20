@@ -17,7 +17,7 @@ import {
   type ChessRoom
 } from "../services/chessRoomService";
 import type { ChessSide, HistoryMove } from "../logic/chessLogic";
-import { boardFromMoves } from "../logic/chessLogic";
+import { boardFromMoves, findKingInCheck } from "../logic/chessLogic";
 import { chessAuth } from "../../shared/firebase";
 import { CHESS_HOME_PATH } from "../constants";
 import Loading from "../../../components/Loading";
@@ -176,6 +176,8 @@ export default function ChessGamePage() {
     navigate(CHESS_HOME_PATH);
   }
 
+  const checkSquare = useMemo(() => (room?.fen ? findKingInCheck(room.fen) : null), [room?.fen]);
+
   const helperText = useMemo(() => {
     if (!room) return "";
     let text = "";
@@ -185,6 +187,7 @@ export default function ChessGamePage() {
         break;
       case "PLAYING":
         text = room.turn === "white" ? "White to move" : "Black to move";
+        if (checkSquare) text += " · Check!";
         break;
       case "CHECKMATE":
         text = room.winner ? `${room.winner === "white" ? "White" : "Black"} wins by checkmate.` : "Checkmate.";
@@ -203,7 +206,7 @@ export default function ChessGamePage() {
     }
     if (!side) text = text ? `${text} · You are spectating.` : "You are watching this game.";
     return text;
-  }, [room, side]);
+  }, [room, side, checkSquare]);
 
   const historyMoves = useMemo<HistoryMove[]>(() => {
     if (!room?.moves) return [];
@@ -440,6 +443,7 @@ export default function ChessGamePage() {
             perspective={side ?? "white"}
             canMove={Boolean(isMyTurn && room.status === "PLAYING")}
             lastMove={lastMove ? { from: lastMove.from, to: lastMove.to } : null}
+            checkSquare={checkSquare}
             helperText={helperText}
             onMove={handleMove}
           />

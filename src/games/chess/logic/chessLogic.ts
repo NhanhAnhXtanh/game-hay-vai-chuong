@@ -114,6 +114,28 @@ export function boardFromMoves(moves: HistoryMove[]): BoardMatrix {
   return matrix;
 }
 
+export function findKingInCheck(fen: string): Square | null {
+  try {
+    const chess = createChess(fen);
+    if (!chess.inCheck()) return null;
+    const turn = chess.turn();
+    const board = chess.board();
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        const cell = board[row][col];
+        if (cell && cell.type === "k" && cell.color === turn) {
+          const rank = 8 - row;
+          const file = FILES[col];
+          return `${file}${rank}` as Square;
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 export function looseMovesFrom(fen: string, from?: Square): LooseMove[] {
   const engine = createChess(fen) as unknown as { _moves?: (args: Record<string, unknown>) => any[] };
   const internalMoves =

@@ -255,15 +255,28 @@ export async function makeChessMove(roomId: string, payload: MovePayload) {
       room.finishAck = { white: false, black: false };
       incrementScore(room, side);
     } else {
-      room.status = "PLAYING";
-      room.result = null;
-      room.winner = null;
-      room.finishedAt = null;
-      room.finishAck = { white: false, black: false };
-    }
-
-    if (capturedPiece !== "k") {
       room.fen = computedFen;
+      const endState = detectEndState(chess);
+      if (endState === "CHECKMATE") {
+        room.status = "CHECKMATE";
+        room.winner = side;
+        room.result = { type: "CHECKMATE", by: side };
+        room.finishedAt = serverTimestamp();
+        room.finishAck = { white: false, black: false };
+        incrementScore(room, side);
+      } else if (endState === "STALEMATE" || endState === "DRAW") {
+        room.status = endState;
+        room.winner = null;
+        room.result = { type: endState };
+        room.finishedAt = serverTimestamp();
+        room.finishAck = { white: false, black: false };
+      } else {
+        room.status = "PLAYING";
+        room.result = null;
+        room.winner = null;
+        room.finishedAt = null;
+        room.finishAck = { white: false, black: false };
+      }
     }
 
     return room;
@@ -284,6 +297,19 @@ function findLooseInternalMove(chess: ReturnType<typeof createChess>, payload: M
     if (exact) return exact;
   }
   return matches[0];
+}
+
+function detectEndState(chess: ReturnType<typeof createChess>): ChessRoomStatus | null {
+  try {
+    if (chess.isCheckmate()) return "CHECKMATE";
+    if (chess.isStalemate()) return "STALEMATE";
+    if (chess.isInsufficientMaterial()) return "DRAW";
+    if (chess.isThreefoldRepetition()) return "DRAW";
+    if (chess.isDraw()) return "DRAW";
+  } catch {
+    /* ignore */
+  }
+  return null;
 }
 
 function buildSan(chess: ReturnType<typeof createChess>, internalMove: any): string | null {

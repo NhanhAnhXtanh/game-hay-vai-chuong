@@ -17,6 +17,7 @@ interface ChessBoardProps {
   perspective: ChessSide;
   canMove: boolean;
   lastMove?: { from: Square; to: Square } | null;
+  checkSquare?: Square | null;
   helperText?: string;
   onMove: (from: Square, to: Square, promotion?: PieceSymbol | null) => void;
 }
@@ -24,7 +25,7 @@ interface ChessBoardProps {
 const files = ["a", "b", "c", "d", "e", "f", "g", "h"];
 const ranks = ["8", "7", "6", "5", "4", "3", "2", "1"];
 
-export default function ChessBoard({ fen, board, perspective, canMove, lastMove, helperText, onMove }: ChessBoardProps) {
+export default function ChessBoard({ fen, board, perspective, canMove, lastMove, checkSquare, helperText, onMove }: ChessBoardProps) {
   const chess = useMemo(() => createChess(fen), [fen]);
   const [selected, setSelected] = useState<Square | null>(null);
   const [legalMoves, setLegalMoves] = useState<LooseMove[]>([]);
@@ -94,12 +95,17 @@ export default function ChessBoard({ fen, board, perspective, canMove, lastMove,
             const isSelected = selected === square;
             const isLegalTarget = legalMoves.some(m => m.to === square);
             const isLastMove = lastMove && (lastMove.from === square || lastMove.to === square);
-            const baseColor = isLight ? "bg-slate-100" : "bg-slate-400/60";
-            const highlight = isSelected
-              ? "shadow-[inset_0_0_0_3px_rgba(79,70,229,0.95)]"
-              : isLastMove
-                ? "shadow-[inset_0_0_0_2px_rgba(251,191,36,0.75)]"
-                : "shadow-[inset_0_0_0_1px_rgba(148,163,184,0.45)]";
+            const isCheck = checkSquare === square;
+            const baseColor = isCheck
+              ? "bg-red-200"
+              : isLight ? "bg-slate-100" : "bg-slate-400/60";
+            const highlight = isCheck
+              ? "shadow-[inset_0_0_0_3px_rgba(220,38,38,0.9)]"
+              : isSelected
+                ? "shadow-[inset_0_0_0_3px_rgba(79,70,229,0.95)]"
+                : isLastMove
+                  ? "shadow-[inset_0_0_0_2px_rgba(251,191,36,0.75)]"
+                  : "shadow-[inset_0_0_0_1px_rgba(148,163,184,0.45)]";
             return (
               <button
                 key={square}
