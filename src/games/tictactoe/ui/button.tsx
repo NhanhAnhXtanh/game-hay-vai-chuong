@@ -5,6 +5,7 @@ export function Button(props: ButtonHTMLAttributes<HTMLButtonElement> & { varian
   const solid = "bg-blue-600 hover:bg-blue-700 text-white";
   const outline = "border border-gray-300 hover:bg-gray-50 text-gray-800";
   const cls = `${base} ${props.variant==="outline" ? outline : solid} ${props.className ?? ""}`;
-  const { variant, ...rest } = props;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { variant: _variant, ...rest } = props;
   return <button {...rest} className={cls} />;
 }

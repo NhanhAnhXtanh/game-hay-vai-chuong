@@ -137,13 +137,14 @@ export function findKingInCheck(fen: string): Square | null {
 }
 
 export function looseMovesFrom(fen: string, from?: Square): LooseMove[] {
-  const engine = createChess(fen) as unknown as { _moves?: (args: Record<string, unknown>) => any[] };
-  const internalMoves =
+  type InternalMove = { from: number; to: number; promotion?: PieceSymbol | null };
+  const engine = createChess(fen) as unknown as { _moves?: (args: Record<string, unknown>) => InternalMove[] };
+  const internalMoves: InternalMove[] =
     typeof engine._moves === "function"
       ? engine._moves({ legal: false, square: from })
       : [];
 
-  return internalMoves.map((move: any) => ({
+  return internalMoves.map((move) => ({
     from: indexToSquare(move.from),
     to: indexToSquare(move.to),
     promotion: move.promotion ?? null

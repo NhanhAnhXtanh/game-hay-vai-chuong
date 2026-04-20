@@ -283,17 +283,25 @@ export async function makeChessMove(roomId: string, payload: MovePayload) {
   });
 }
 
+type InternalMove = {
+  from: number;
+  to: number;
+  promotion?: PieceSymbol | null;
+  captured?: PieceSymbol | null;
+  [k: string]: unknown;
+};
+
 function findLooseInternalMove(chess: ReturnType<typeof createChess>, payload: MovePayload) {
-  const engine = chess as unknown as { _moves?: (params: Record<string, unknown>) => any[] };
+  const engine = chess as unknown as { _moves?: (params: Record<string, unknown>) => InternalMove[] };
   if (typeof engine._moves !== "function") return null;
   const possible = engine._moves({ legal: false, square: payload.from });
   const fromIndex = squareToIndex(payload.from);
   const toIndex = squareToIndex(payload.to);
   const wantedPromotion = payload.promotion ?? null;
-  const matches = possible.filter((move: any) => move.from === fromIndex && move.to === toIndex);
+  const matches = possible.filter((move) => move.from === fromIndex && move.to === toIndex);
   if (!matches.length) return null;
   if (wantedPromotion) {
-    const exact = matches.find((move: any) => move.promotion === wantedPromotion);
+    const exact = matches.find((move) => move.promotion === wantedPromotion);
     if (exact) return exact;
   }
   return matches[0];
@@ -312,10 +320,10 @@ function detectEndState(chess: ReturnType<typeof createChess>): ChessRoomStatus 
   return null;
 }
 
-function buildSan(chess: ReturnType<typeof createChess>, internalMove: any): string | null {
+function buildSan(chess: ReturnType<typeof createChess>, internalMove: InternalMove): string | null {
   const engine = chess as unknown as {
-    _moveToSan?: (move: any, moves: any[]) => string;
-    _moves?: (params: Record<string, unknown>) => any[];
+    _moveToSan?: (move: InternalMove, moves: InternalMove[]) => string;
+    _moves?: (params: Record<string, unknown>) => InternalMove[];
   };
   if (typeof engine._moveToSan !== "function" || typeof engine._moves !== "function") {
     return null;

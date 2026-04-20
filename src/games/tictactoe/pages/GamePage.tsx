@@ -270,7 +270,7 @@ export default function GamePage() {
       setCopied(true);
       if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
       copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
-    } catch (_) {
+    } catch {
       setCopied(false);
     }
   }
@@ -470,7 +470,7 @@ export default function GamePage() {
         text
       });
       setChatDraft("");
-    } catch (_) {
+    } catch {
       // ignore errors for now
     }
   }

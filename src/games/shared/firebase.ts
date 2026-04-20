@@ -36,7 +36,7 @@ export const chessAuth = getAuth(chessApp);
 export async function ensureAnon(displayName: string) {
   if (!auth.currentUser) await signInAnonymously(auth);
   if (auth.currentUser && displayName) {
-    try { await updateProfile(auth.currentUser, { displayName }); } catch {}
+    try { await updateProfile(auth.currentUser, { displayName }); } catch { /* ignore */ }
   }
   return auth.currentUser!;
 }

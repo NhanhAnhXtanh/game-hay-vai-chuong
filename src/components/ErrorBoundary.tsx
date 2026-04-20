@@ -43,7 +43,8 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-function ErrorFallback({ 
+// eslint-disable-next-line react-refresh/only-export-components
+function ErrorFallback({
   error, 
   onGoHome, 
   onReload 
