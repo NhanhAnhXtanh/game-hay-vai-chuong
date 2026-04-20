@@ -9,6 +9,7 @@ import {
 } from "../services/roomService";
 import { TIC_TAC_TOE_HOME_PATH, TIC_TAC_TOE_INVITE_PATH } from "../constants";
 import { decodeInviteToken, encodeInviteToken } from "../services/inviteLink";
+import { listenConnection } from "../services/connection";
 import GameBoard from "../components/GameBoard";
 import Loading from "../../../components/Loading";
 
@@ -17,6 +18,7 @@ export default function GamePage() {
   const { roomId, inviteId } = params;
   const [sp] = useSearchParams();
   const legacyPw = sp.get("pw") || undefined;
+  const spectateOnly = sp.get("spectate") === "1";
 
   const [resolvedRoomId, setResolvedRoomId] = useState<string | null>(null);
   const [resolvedPassword, setResolvedPassword] = useState<string | undefined>(undefined);
@@ -44,6 +46,8 @@ export default function GamePage() {
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const timeoutClaimedRef = useRef<number | null>(null);
+  const [isOnline, setIsOnline] = useState(true);
+  const [isSpectator, setIsSpectator] = useState(false);
 
   const mySide = useMemo<"X" | "O" | null>(() => {
     if (!room || !myUid) return null;
@@ -99,17 +103,33 @@ export default function GamePage() {
         return; // wait for next effect run with updated name
       }
       localStorage.setItem("player-name", effectiveName);
-      try {
-        await joinRoom(resolvedRoomId, me.uid, effectiveName, resolvedPassword);
+      if (spectateOnly) {
+        setIsSpectator(true);
         setJoinError(null);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Không thể tham gia phòng.";
-        setJoinError(msg);
+      } else {
+        try {
+          await joinRoom(resolvedRoomId, me.uid, effectiveName, resolvedPassword);
+          setIsSpectator(false);
+          setJoinError(null);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Không thể tham gia phòng.";
+          if (msg === "Phòng đã đủ 2 người") {
+            setIsSpectator(true);
+            setJoinError(null);
+          } else {
+            setJoinError(msg);
+          }
+        }
       }
       off = listenRoom(resolvedRoomId, setRoom);
     })();
     return () => { if (off) off(); };
-  }, [resolvedRoomId, resolvedPassword, displayName]);
+  }, [resolvedRoomId, resolvedPassword, displayName, spectateOnly]);
+
+  useEffect(() => {
+    const off = listenConnection(setIsOnline);
+    return () => off();
+  }, []);
 
   useEffect(() => {
     if (!resolvedRoomId) return;
@@ -457,6 +477,11 @@ export default function GamePage() {
 
   return (
     <>
+      {!isOnline && (
+        <div className="fixed top-0 inset-x-0 z-[60] bg-amber-500 text-white text-sm font-medium py-2 px-4 text-center shadow-md">
+          Mất kết nối — đang thử kết nối lại…
+        </div>
+      )}
       {showWinModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl space-y-4 text-center">
@@ -516,7 +541,14 @@ export default function GamePage() {
       )}
       <div className="space-y-4 md:space-y-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-xl sm:text-2xl font-bold break-all">Phòng {resolvedRoomId}</h1>
+          <h1 className="text-xl sm:text-2xl font-bold break-all">
+            Phòng {resolvedRoomId}
+            {isSpectator && (
+              <span className="ml-2 inline-block px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 text-xs font-medium align-middle">
+                Đang xem
+              </span>
+            )}
+          </h1>
           <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
             <button
               className="px-3 py-2 rounded border hover:bg-slate-100 text-sm sm:text-base"
